@@ -1,0 +1,12 @@
+# Core dependencies
+numpy>=1.20.0
+torch>=1.9.0
+matplotlib>=3.4.0
+
+# Optional but recommended
+pyyaml>=5.4.0          # For config files
+tqdm>=4.60.0           # Progress bars
+tensorboard>=2.5.0     # Training visualization
+
+# For real-time PICO-8 control (optional)
+# pynput>=1.7.0
