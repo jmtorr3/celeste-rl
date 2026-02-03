@@ -67,7 +67,7 @@ celeste-rl/
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/celeste-rl.git
+git clone https://github.com/jmtorr3/celeste-rl.git
 cd celeste-rl
 
 # Create virtual environment
