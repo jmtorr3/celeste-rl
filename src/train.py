@@ -3,18 +3,26 @@ Training Script for Celeste RL Agent
 
 Usage:
     python -m src.train
-    python -m src.train --episodes 5000 --room 0
+    python src/train.py
 """
 
 import argparse
 import numpy as np
 import pickle
 from pathlib import Path
+import sys
+import os
+
+# Handle imports whether run as module or script
+if __name__ == "__main__" and __package__ is None:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.environment import CelesteEnv
+    from src.agent import DQNAgent
+else:
+    from .environment import CelesteEnv
+    from .agent import DQNAgent
 
 import torch
-
-from .environment import CelesteEnv
-from .agent import DQNAgent
 
 
 def train(

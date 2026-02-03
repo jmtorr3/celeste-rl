@@ -11,7 +11,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from .network import DQN
+try:
+    from .network import DQN
+except ImportError:
+    from network import DQN
 
 
 class ReplayBuffer:
