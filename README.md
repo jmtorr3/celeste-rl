@@ -156,6 +156,12 @@ target_update_freq: 200
 
 MIT License - See LICENSE file
 
+## Project Contributors
+
+- Akhil Madipalli (akhimadi)
+- Maryam Malik (maryam23)
+- Jorge Manuel Torre (jmt1006)
+
 ## Acknowledgments
 
 - Pyleste by the Celeste Classic community
