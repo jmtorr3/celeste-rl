@@ -37,9 +37,8 @@ env/
 # Jupyter Notebooks
 .ipynb_checkpoints/
 
-# Training outputs (keep structure, ignore large files)
-models/*.pt
-models/*.pth
+# Models (keep directory structure, ignore all model files)
+models/*
 !models/.gitkeep
 
 # Training logs
@@ -47,10 +46,6 @@ models/*.pth
 runs/
 logs/
 tensorboard/
-
-# But keep example/final results
-!models/dqn_best.pt
-!training_curve*.png
 
 # Local config overrides
 configs/local_*.yaml

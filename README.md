@@ -2,65 +2,38 @@
 
 Deep reinforcement learning agent that learns to play Celeste Classic. Uses DQN with custom reward shaping built on the Pyleste emulator.
 
-![Training Progress](docs/training_curve.png)
-
-## Results
-
-The agent learned to complete Level 1 (100m) in ~150 training episodes:
-
-| Metric | Value |
-|--------|-------|
-| Episodes to first completion | ~150 |
-| Training episodes | 3,000 |
-| Best height reached | 0 (level complete!) |
-| Starting height | 96 |
-
 ## Project Structure
 
 ```
 celeste-rl/
 ├── README.md
 ├── requirements.txt
-├── setup.py                    # Optional: for pip install
 │
-├── pyleste/                    # Pyleste emulator (submodule or copy)
+├── pyleste/                    # Pyleste emulator
 │   ├── PICO8.py
 │   ├── CelesteUtils.py
 │   ├── Searcheline.py
 │   └── Carts/
 │       └── Celeste.py
 │
-├── src/                        # Your RL code
+├── src/                        # RL code
 │   ├── __init__.py
-│   ├── environment.py          # CelesteEnv class
-│   ├── agent.py                # DQN agent
-│   ├── network.py              # Neural network architecture
-│   ├── replay_buffer.py        # Experience replay
-│   └── train.py                # Training script
+│   ├── environment.py          # CelesteEnv class (Gymnasium-style wrapper)
+│   └── network.py              # DQN and DuelingDQN architectures
 │
 ├── scripts/                    # Utility scripts
 │   ├── watch_agent.py          # Visualize trained agent
-│   ├── evaluate.py             # Evaluate performance
-│   ├── export_tas.py           # Export to TAS format
-│   └── diagnose.py             # Debug environment
+│   └── evaluate.py             # Evaluate performance
 │
-├── configs/                    # Hyperparameter configs
-│   └── dqn_config.yaml
+├── configs/
+│   └── dqn_config.yaml         # Hyperparameter config
 │
-├── models/                     # Saved model weights
-│   ├── .gitkeep
-│   └── dqn_best.pt             # (gitignored, but keep .gitkeep)
+├── models/                     # Saved model weights (gitignored)
+│   └── .gitkeep
 │
-├── docs/                       # Documentation & figures
-│   ├── training_curve.png
-│   ├── architecture.png
-│   └── presentation.pptx
-│
-├── notebooks/                  # Jupyter notebooks (optional)
-│   └── analysis.ipynb
-│
-└── tests/                      # Unit tests (optional)
-    └── test_environment.py
+├── notebooks/                  # Jupyter notebooks
+├── tests/
+└── docs/
 ```
 
 ## Installation
@@ -78,30 +51,13 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Quick Start
-
-### Train an agent
-```bash
-python src/train.py
-```
-
-### Watch a trained agent play
-```bash
-python scripts/watch_agent.py --model models/dqn_best.pt
-```
-
-### Evaluate performance
-```bash
-python scripts/evaluate.py --model models/dqn_best.pt --episodes 100
-```
-
 ## How It Works
 
-### Environment
+### Environment (`src/environment.py`)
 
-The agent observes:
-- Player position (x, y)
-- Player velocity (spd.x, spd.y)
+The agent observes a 6-dimensional state:
+- Player position (x, y) — normalized
+- Player velocity (spd.x, spd.y) — normalized
 - Grace frames (coyote time)
 - Dash availability
 
@@ -112,23 +68,34 @@ And can take 15 actions:
 
 ### Reward Function
 
-The key to training success was reward shaping:
-
 ```python
 reward = 0
 if reached_new_height:
-    reward += height_gained * 1.0  # Big bonus for progress!
+    reward += height_gained * 1.0  # Bonus for upward progress
 if is_moving:
     reward += 0.01                  # Small exploration bonus
 if stuck_too_long:
     reward -= 0.1                   # Penalty for inaction
-reward -= 0.01                      # Time penalty
+reward -= 0.01                      # Time penalty per step
+# Death: -5.0 | Level complete: +100.0
 ```
 
-### Network Architecture
+### Network Architecture (`src/network.py`)
 
+Two architectures available:
+- **DQN**: `Input(6) → Dense(256) → ReLU → Dense(256) → ReLU → Dense(128) → ReLU → Output(15)`
+- **DuelingDQN**: Shared features → separate value and advantage streams
+
+## Scripts
+
+### Watch a trained agent play
+```bash
+python scripts/watch_agent.py --model models/dqn_best.pt --room 0 --delay 0.03
 ```
-Input (6) → Dense(256) → ReLU → Dense(256) → ReLU → Dense(128) → ReLU → Output (15)
+
+### Evaluate performance
+```bash
+python scripts/evaluate.py --model models/dqn_best.pt --episodes 100 --baseline
 ```
 
 ## Configuration
@@ -136,14 +103,19 @@ Input (6) → Dense(256) → ReLU → Dense(256) → ReLU → Dense(128) → ReL
 Key hyperparameters in `configs/dqn_config.yaml`:
 
 ```yaml
-learning_rate: 0.0005
-gamma: 0.99
-epsilon_start: 1.0
-epsilon_end: 0.05
-epsilon_decay: 0.9995
-batch_size: 128
-buffer_size: 200000
-target_update_freq: 200
+environment:
+  room: 0
+  max_steps: 500
+
+agent:
+  learning_rate: 0.0005
+  gamma: 0.99
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay: 0.9995
+  batch_size: 128
+  buffer_size: 200000
+  target_update_freq: 200
 ```
 
 ## References
@@ -151,18 +123,3 @@ target_update_freq: 200
 - [Pyleste](https://github.com/CelesteClassic/Pyleste) - Python Celeste Classic emulator
 - [Celeste Classic](https://celesteclassic.github.io/) - Original game
 - [DQN Paper](https://arxiv.org/abs/1312.5602) - Playing Atari with Deep RL
-
-## License
-
-MIT License - See LICENSE file
-
-## Project Contributors
-
-- Akhil Madipalli (akhimadi)
-- Maryam Malik (maryam23)
-- Jorge Manuel Torre (jmt1006)
-
-## Acknowledgments
-
-- Pyleste by the Celeste Classic community
-- Original Celeste Classic by Matt Thorson and Noel Berry
