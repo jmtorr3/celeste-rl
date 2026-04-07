@@ -30,6 +30,7 @@ These must be done before further training. See `docs/professor_feedback_fixes.m
       Append flattened 5×5 tile grid centered on player
       `0.0` = empty, `1.0` = solid, `-1.0` = hazard/spike
       Files: `src/environment.py`, `src/train_v2.py`
+      ✓ `game.tile_at(x, y)` already exists in `pyleste/Carts/Celeste.py:568` — no workaround needed
 
 - [ ] **Update `_get_obs_dim()`** — return 31 after tile grid added
 
@@ -71,15 +72,31 @@ BC treats imitation as supervised classification: map `(state, action)` pairs fr
 ### TAS data pipeline
 
 ```bash
-# 1. Clone TAS recordings
+# 1. Clone TAS recordings (UniversalClassicTas — contains actual input files)
 git clone https://github.com/CelesteClassic/UniversalClassicTas pyleste/UniversalClassicTas
+# Note: https://github.com/CelesteClassic/tasdatabase is metadata only (frame counts etc.) — not the inputs
 
-# 2. Export (s, a) pairs from TAS  ← scripts/export_tas.py (not yet written)
+# 2. Export (s, a) pairs by replaying TAS through the emulator
 python scripts/export_tas.py --output data/tas_transitions.pkl
 
 # 3. Train BC model
 python src/train_bc.py --data data/tas_transitions.pkl
 ```
+
+### TAS file format
+
+TAS files are plain text, comma-separated integers — one per frame, same bitmask format `set_btn_state()` already uses:
+
+```
+0,0,18,2,2,2,34,0,0,16,...
+```
+
+Parsing is trivial:
+```python
+inputs = [int(x) for x in open("tas_file.txt").read().split(",") if x.strip()]
+```
+
+`CelesteUtils.watch_inputs(p8, inputs)` already replays this format through the emulator, so `export_tas.py` is mostly a loop that calls `watch_inputs` and records `(state, action)` at each frame.
 
 ### BC notes
 - Use **action-weighted cross-entropy loss** — TAS is heavily biased toward right/up, dash is rare
