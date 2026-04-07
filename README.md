@@ -8,6 +8,8 @@ Deep reinforcement learning agent that learns to play Celeste Classic. Uses DQN 
 celeste-rl/
 ├── README.md
 ├── requirements.txt
+├── train.sh                    # Train agent (shortcut)
+├── watch.sh                    # Watch agent play (shortcut)
 │
 ├── pyleste/                    # Pyleste emulator
 │   ├── PICO8.py
@@ -86,9 +88,28 @@ Two architectures available:
 - **DQN**: `Input(6) → Dense(256) → ReLU → Dense(256) → ReLU → Dense(128) → ReLU → Output(15)`
 - **DuelingDQN**: Shared features → separate value and advantage streams
 
-## Scripts
+## Quick Start
+
+### Train an agent
+```bash
+./train.sh                              # DQN, 3000 episodes, room 0
+./train.sh -v2                          # train_v2 (exploration bonuses)
+./train.sh -e 5000 -r 2                 # 5000 episodes, room 2
+./train.sh -m models/dqn_best.pt        # continue from checkpoint
+./train.sh --eval-only -m models/dqn_best.pt
+```
 
 ### Watch a trained agent play
+```bash
+./watch.sh                              # loads models/dqn_best.pt
+./watch.sh -m models/dqn_final.pt      # specific model
+./watch.sh -e 10 -d 0.05               # 10 episodes, slower playback
+./watch.sh -r 1                         # different room
+```
+
+## Scripts
+
+### Manual invocation
 ```bash
 python scripts/watch_agent.py --model models/dqn_best.pt --room 0 --delay 0.03
 ```
