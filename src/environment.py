@@ -195,7 +195,7 @@ class CelesteEnv:
             return -5.0  # Death penalty
         
         if player.y < -8:
-            return 100.0  # Level complete bonus
+            return 500.0  # Level complete bonus
         
         reward = 0.0
         
@@ -233,13 +233,16 @@ class CelesteEnv:
     def _check_terminated(self) -> bool:
         """Check if episode is terminated."""
         player = self._get_player()
-        
+
         if player is None:
             return True
-        
+
         if player.y < -8:
             return True
-        
+
+        if self.stuck_count > 150:
+            return True
+
         return False
     
     def _get_info(self) -> dict:
