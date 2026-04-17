@@ -106,7 +106,7 @@ class CelesteEnv:
     
     def _get_obs_dim(self) -> int:
         """Get observation dimension."""
-        return 6
+        return 31
     
     def _get_player(self):
         """Get the actual player object (not player_spawn)."""
@@ -161,15 +161,25 @@ class CelesteEnv:
         if player is None:
             return np.zeros(self._get_obs_dim(), dtype=np.float32)
         
+        tile_x = int(player.x / 8)
+        tile_y = int(player.y / 8)
+        tile_grid = []
+        for dy in range(-2, 3):
+            for dx in range(-2, 3):
+                tx = max(0, min(15, tile_x + dx))
+                ty = max(0, min(15, tile_y + dy))
+                tile_grid.append(float(self.p8.game.tile_at(tx, ty)))
+
         obs = np.array([
-            player.x / 64 - 1,
-            player.y / 64 - 1,
+            player.x / 128.0,
+            player.y / 128.0,
             player.spd.x / 4,
             player.spd.y / 4,
             player.grace / 6,
             float(player.djump),
+            *tile_grid,
         ], dtype=np.float32)
-        
+
         return obs
     
     def _compute_reward(self) -> float:
