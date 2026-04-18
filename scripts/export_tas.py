@@ -1,187 +1,139 @@
 """
-Export trained agent's inputs to TAS format for playback in real PICO-8.
+Export TAS replay data as (state, action) pairs for Behavioral Cloning.
+
+Replays each TAS file through Pyleste, records the 31-dim observation and
+the corresponding action index (into CelesteEnv.SIMPLE_ACTIONS) at every frame.
 
 Usage:
-    python scripts/export_tas.py --model models/model_v2_best.pt
-    python scripts/export_tas.py --model models/model_v2_best.pt --attempts 10
+    python scripts/export_tas.py
+    python scripts/export_tas.py --tas-dir TAS_data/any% --output data/tas_transitions.pkl
+    python scripts/export_tas.py --room 0 --verbose
 """
 
 import argparse
+import pickle
 import sys
 import os
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(
-    0,
-    os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pyleste"
-    ),
-)
 
-from src.agent import DQNAgent
-from PICO8 import PICO8
-from Carts.Celeste import Celeste
-import CelesteUtils as utils
-import numpy as np
+from src.environment import CelesteEnv
+
+SIMPLE_ACTIONS = CelesteEnv.SIMPLE_ACTIONS
 
 
-def get_player(p8):
-    for obj in p8.game.objects:
-        if type(obj).__name__ == "player":
-            return obj
-    return None
+def parse_tas(path: str):
+    """Parse a .tas file into a list of button-state integers."""
+    text = open(path).read().strip()
+    if text.startswith('[]'):
+        text = text[2:]
+    return [int(x) for x in text.split(',') if x.strip()]
 
 
-def btn_to_tas(btn_state):
-    """Convert button state to TAS string format."""
-    parts = []
-    if btn_state & 1:
-        parts.append("L")
-    if btn_state & 2:
-        parts.append("R")
-    if btn_state & 4:
-        parts.append("U")
-    if btn_state & 8:
-        parts.append("D")
-    if btn_state & 16:
-        parts.append("Z")  # Jump = Z in PICO-8
-    if btn_state & 32:
-        parts.append("X")  # Dash = X in PICO-8
-    return ",".join(parts) if parts else ""
+def action_to_idx(btn: int):
+    """Map a raw button bitmask to its SIMPLE_ACTIONS index. Returns None if not found."""
+    try:
+        return SIMPLE_ACTIONS.index(btn)
+    except ValueError:
+        return None
 
 
-def record_attempt(agent, room=0, max_frames=1000, epsilon=0.0):
-    """Record one attempt and return (inputs, success, final_height)."""
+def export_room(room: int, inputs: list, verbose: bool = False):
+    """
+    Replay inputs through a single room, collect (obs, action_idx) pairs.
+    Returns (transitions, skipped_count).
+    """
+    env = CelesteEnv(room=room, max_steps=len(inputs) + 100)
+    obs, _ = env.reset()
 
-    SIMPLE_ACTIONS = [0, 1, 2, 16, 17, 18, 32, 33, 34, 36, 37, 38, 40, 41, 42]
+    transitions = []
+    skipped = 0
 
-    p8 = PICO8(Celeste)
-    utils.load_room(p8, room)
-    utils.skip_player_spawn(p8)
+    for btn in inputs:
+        action_idx = action_to_idx(btn)
 
-    inputs = []
-    agent.epsilon = epsilon
+        if action_idx is None:
+            if verbose:
+                print(f"  [room {room}] unrecognized input {btn}, skipping")
+            skipped += 1
+            env.step(0)
+            obs = env._get_obs()
+            continue
 
-    for frame in range(max_frames):
-        player = get_player(p8)
+        transitions.append((obs.copy(), action_idx))
+        obs, _, terminated, truncated, info = env.step(action_idx)
 
-        if player is None:
-            return inputs, False, 999  # Died
+        if terminated:
+            if info.get('player_y', 999) < -8 and verbose:
+                print(f"  [room {room}] complete at step {len(transitions)}")
+            break
+        if truncated:
+            break
 
-        if player.y < -8:
-            return inputs, True, player.y  # Success!
-
-        # Get observation
-        obs = np.array(
-            [
-                player.x / 64 - 1,
-                player.y / 64 - 1,
-                player.spd.x / 4,
-                player.spd.y / 4,
-                player.grace / 6,
-                float(player.djump),
-            ],
-            dtype=np.float32,
-        )
-
-        # Get action
-        action_idx = agent.select_action(obs, training=(epsilon > 0))
-        btn_state = SIMPLE_ACTIONS[action_idx]
-
-        inputs.append(btn_state)
-
-        p8.set_btn_state(btn_state)
-        p8.step()
-
-    player = get_player(p8)
-    final_height = player.y if player else 999
-    return inputs, False, final_height
+    return transitions, skipped
 
 
-def export_tas(model_path, output_path="tas_output.tas", attempts=5, epsilon=0.05):
-    """Try multiple attempts and export the best one."""
-
-    agent = DQNAgent(state_dim=6, action_dim=15, device="cpu")
-    agent.load(model_path)
-    print(f"Loaded model from {model_path}")
-
-    best_inputs = None
-    best_height = float("inf")
-    success = False
-
-    print(f"\nRecording {attempts} attempts...")
-
-    for i in range(attempts):
-        inputs, completed, height = record_attempt(agent, epsilon=epsilon)
-
-        status = "✓ COMPLETE!" if completed else f"height={height:.0f}"
-        print(f"  Attempt {i+1}: {len(inputs)} frames, {status}")
-
-        if completed:
-            if best_inputs is None or len(inputs) < len(best_inputs):
-                best_inputs = inputs
-                best_height = height
-                success = True
-        elif height < best_height and not success:
-            best_inputs = inputs
-            best_height = height
-
-    if best_inputs is None:
-        print("No valid attempts recorded!")
-        return
-
-    # Write TAS file
-    with open(output_path, "w") as f:
-        for btn_state in best_inputs:
-            f.write(btn_to_tas(btn_state) + "\n")
-
-    print(f"\n{'='*50}")
-    print(f"Exported to: {output_path}")
-    print(f"Frames: {len(best_inputs)}")
-    print(f"Success: {success}")
-    print(f"Best height: {best_height}")
-    print(f"{'='*50}")
-
-    # Also save as Python list for reference
-    py_path = output_path.replace(".tas", ".py")
-    with open(py_path, "w") as f:
-        f.write(f"# TAS inputs for Celeste Classic\n")
-        f.write(f"# Frames: {len(best_inputs)}\n")
-        f.write(f"# Success: {success}\n\n")
-        f.write(f"inputs = {best_inputs}\n")
-
-    print(f"Also saved as: {py_path}")
-
-    # Print instructions
-    print(f"""
-{'='*50}
-HOW TO PLAY IN PICO-8:
-{'='*50}
-
-1. Download UniversalClassicTas:
-   https://github.com/CelesteClassic/UniversalClassicTas
-
-2. Copy '{output_path}' to the TAS tool folder
-
-3. Run the TAS tool with PICO-8
-
-4. Watch your AI play!
-
-Alternative: Use the realtime script (less reliable):
-   python scripts/play_realtime.py --tas {py_path}
-{'='*50}
-""")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Export agent to TAS format")
-    parser.add_argument("--model", type=str, default="models/model_v2_best.pt")
-    parser.add_argument("--output", type=str, default="tas_output.tas")
-    parser.add_argument("--attempts", type=int, default=10)
-    parser.add_argument(
-        "--epsilon", type=float, default=0.05, help="Exploration during recording"
-    )
-
+def main():
+    parser = argparse.ArgumentParser(description='Export TAS transitions for BC training')
+    parser.add_argument('--tas-dir', type=str, default='TAS_data/any%')
+    parser.add_argument('--output', type=str, default='data/tas_transitions.pkl')
+    parser.add_argument('--room', type=int, default=None, help='Export single room only (0-indexed)')
+    parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
-    export_tas(args.model, args.output, args.attempts, args.epsilon)
+    tas_dir = Path(args.tas_dir)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(exist_ok=True)
+
+    if args.room is not None:
+        tas_files = [(args.room, tas_dir / f'TAS{args.room + 1}.tas')]
+    else:
+        tas_files = sorted(
+            [(int(p.stem.replace('TAS', '')) - 1, p) for p in tas_dir.glob('TAS*.tas')],
+            key=lambda x: x[0]
+        )
+
+    all_transitions = []
+    total_skipped = 0
+
+    print(f"TAS dir:  {tas_dir}")
+    print(f"Output:   {output_path}")
+    print(f"Rooms:    {len(tas_files)}")
+    print("=" * 55)
+
+    for room, tas_path in tas_files:
+        if not tas_path.exists():
+            print(f"  Room {room:2d} | {tas_path.name} not found, skipping")
+            continue
+
+        inputs = parse_tas(str(tas_path))
+        transitions, skipped = export_room(room, inputs, verbose=args.verbose)
+        total_skipped += skipped
+        all_transitions.extend(transitions)
+
+        print(f"  Room {room:2d} | {tas_path.name} | {len(inputs)} inputs → {len(transitions)} transitions | skipped {skipped}")
+
+    print("=" * 55)
+    print(f"Total transitions: {len(all_transitions)}")
+    print(f"Total skipped:     {total_skipped}")
+
+    # Action distribution
+    action_counts = {}
+    for _, a in all_transitions:
+        action_counts[a] = action_counts.get(a, 0) + 1
+
+    print("\nAction distribution:")
+    for idx, count in sorted(action_counts.items(), key=lambda x: -x[1]):
+        btn = SIMPLE_ACTIONS[idx]
+        pct = 100 * count / len(all_transitions)
+        print(f"  [{idx:2d}] btn={btn:2d}  {count:6d}  ({pct:.1f}%)")
+
+    with open(output_path, 'wb') as f:
+        pickle.dump(all_transitions, f)
+
+    print(f"\nSaved to {output_path}")
+
+
+if __name__ == '__main__':
+    main()
