@@ -150,7 +150,7 @@ def train(args):
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), save_dir / 'bc_best.pt')
+            torch.save(model.state_dict(), save_dir / f'{args.run_id}_best.pt')
 
         if epoch % args.log_interval == 0:
             print(
@@ -160,9 +160,9 @@ def train(args):
                 f"best val acc {best_val_acc:.3f}"
             )
 
-    torch.save(model.state_dict(), save_dir / 'bc_final.pt')
+    torch.save(model.state_dict(), save_dir / f'{args.run_id}_final.pt')
     print(f"\nBest val accuracy: {best_val_acc:.3f}")
-    print(f"Saved bc_best.pt and bc_final.pt to {save_dir}")
+    print(f"Saved {args.run_id}_best.pt and {args.run_id}_final.pt to {save_dir}")
 
 
 def evaluate(args):
@@ -174,7 +174,7 @@ def evaluate(args):
     n_actions = len(CelesteEnv.SIMPLE_ACTIONS)
 
     model = DuelingDQN(state_dim, n_actions).to(device)
-    model_path = args.model or 'models/bc_best.pt'
+    model_path = args.model or f'models/{args.run_id}_best.pt'
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     print(f"Loaded {model_path}")
@@ -226,6 +226,7 @@ def main():
     parser.add_argument('--room', type=int, default=0)
     parser.add_argument('--max-steps', type=int, default=500)
     parser.add_argument('--model', type=str, default=None)
+    parser.add_argument('--run-id', type=str, default='bc', help='Prefix for saved model files — use unique ID per run')
     args = parser.parse_args()
 
     if args.eval_only:
