@@ -45,7 +45,13 @@ if [[ ! -f "$MODEL" ]]; then
     exit 1
 fi
 
+# v3+ models use DuelingDQN — pass --dueling automatically
+DUELING=""
+if [[ "$VERSION" -ge 3 ]] || [[ "$MODEL" == *"v3"* ]]; then
+    DUELING="--dueling"
+fi
+
 source venv/bin/activate 2>/dev/null || true
 
 echo "==> Watching v${VERSION}: $MODEL  room=$ROOM  episodes=$EPISODES  delay=${DELAY}s"
-python scripts/watch_agent.py --model "$MODEL" --room "$ROOM" --episodes "$EPISODES" --delay "$DELAY"
+python scripts/watch_agent.py --model "$MODEL" --room "$ROOM" --episodes "$EPISODES" --delay "$DELAY" $DUELING
