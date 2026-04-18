@@ -15,22 +15,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.environment import CelesteEnv
 from src.agent import DQNAgent
+from src.network import DQN, DuelingDQN
 
 
 def watch_agent(
     model_path: str = "models/dqn_best.pt",
     room: int = 0,
     num_episodes: int = 3,
-    delay: float = 0.03
+    delay: float = 0.03,
+    dueling: bool = False,
 ):
     """Watch a trained agent play."""
-    
+
     env = CelesteEnv(room=room, max_steps=1000, use_simple_actions=True)
-    
+
     agent = DQNAgent(
         state_dim=env._get_obs_dim(),
         action_dim=env.n_actions,
-        device="cpu"
+        device="cpu",
+        network_cls=DuelingDQN if dueling else DQN,
     )
     
     try:
@@ -101,12 +104,14 @@ if __name__ == "__main__":
     parser.add_argument("--room", type=int, default=0)
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--delay", type=float, default=0.03)
-    
+    parser.add_argument("--dueling", action="store_true", help="Use DuelingDQN architecture (required for v3+ models)")
+
     args = parser.parse_args()
-    
+
     watch_agent(
         model_path=args.model,
         room=args.room,
         num_episodes=args.episodes,
-        delay=args.delay
+        delay=args.delay,
+        dueling=args.dueling,
     )
