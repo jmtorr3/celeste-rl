@@ -27,7 +27,12 @@ def parse_tas(path: str):
     """Parse a .tas file into a list of button-state integers."""
     text = open(path).read().strip()
     text = text.replace('[', '').replace(']', '')
-    return [int(x) for x in text.split(',') if x.strip()]
+    inputs = []
+    for x in text.split(','):
+        x = x.strip()
+        if x and x.lstrip('-').isdigit():
+            inputs.append(int(x))
+    return inputs
 
 
 def action_to_idx(btn: int):
