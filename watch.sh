@@ -47,7 +47,7 @@ fi
 
 # v3+ models use DuelingDQN — pass --dueling automatically
 DUELING=""
-if [[ "$VERSION" -ge 3 ]] || [[ "$MODEL" == *"v3"* ]]; then
+if [[ "$VERSION" -ge 3 ]] || [[ "$MODEL" == *"v3"* ]] || [[ "$MODEL" == *"hybrid"* ]] || [[ "$MODEL" == *"bc"* ]] || [[ "$MODEL" == *"curriculum"* ]]; then
     DUELING="--dueling"
 fi
 
