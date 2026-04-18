@@ -12,9 +12,9 @@ import torch.nn as nn
 import torch.optim as optim
 
 try:
-    from .network import DQN
+    from .network import DQN, DuelingDQN
 except ImportError:
-    from network import DQN
+    from network import DQN, DuelingDQN
 
 
 class ReplayBuffer:
@@ -76,7 +76,8 @@ class DQNAgent:
         buffer_size: int = 200000,
         batch_size: int = 128,
         target_update_freq: int = 200,
-        device: str = "cpu"
+        device: str = "cpu",
+        network_cls=None,
     ):
         """
         Initialize the DQN agent.
@@ -105,8 +106,9 @@ class DQNAgent:
         self.device = device
         
         # Networks
-        self.policy_net = DQN(state_dim, action_dim).to(device)
-        self.target_net = DQN(state_dim, action_dim).to(device)
+        net_cls = network_cls if network_cls is not None else DQN
+        self.policy_net = net_cls(state_dim, action_dim).to(device)
+        self.target_net = net_cls(state_dim, action_dim).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         
         # Optimizer
@@ -160,9 +162,10 @@ class DQNAgent:
         # Compute current Q values
         current_q = self.policy_net(states).gather(1, actions.unsqueeze(1))
         
-        # Compute target Q values
+        # Compute target Q values (Double DQN: policy net selects, target net evaluates)
         with torch.no_grad():
-            next_q = self.target_net(next_states).max(1)[0]
+            next_actions = self.policy_net(next_states).argmax(1, keepdim=True)
+            next_q = self.target_net(next_states).gather(1, next_actions).squeeze(1)
             target_q = rewards + self.gamma * next_q * (1 - dones)
         
         # Compute loss (Huber loss for stability)

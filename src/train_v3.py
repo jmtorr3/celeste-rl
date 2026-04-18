@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.environment import CelesteEnv
 from src.agent import DQNAgent
+from src.network import DuelingDQN
 import torch
 
 
@@ -82,11 +83,12 @@ def train(args):
         lr=args.lr,
         gamma=0.99,
         epsilon_start=1.0,
-        epsilon_end=0.05,
+        epsilon_end=args.epsilon_end,
         epsilon_decay=args.epsilon_decay,
         batch_size=args.batch_size,
         buffer_size=args.buffer_size,
         device=device,
+        network_cls=DuelingDQN,
     )
 
     start_episode = 0
@@ -181,6 +183,7 @@ def evaluate(args):
         state_dim=env._get_obs_dim(),
         action_dim=env.n_actions,
         device=device,
+        network_cls=DuelingDQN,
     )
     model_path = args.model or str(Path(args.save_dir) / 'v3_best.pt')
     agent.load(model_path)
@@ -221,6 +224,7 @@ def main():
     parser.add_argument('--room', type=int, default=0)
     parser.add_argument('--lr', type=float, default=5e-4)
     parser.add_argument('--epsilon-decay', type=float, default=0.9995)
+    parser.add_argument('--epsilon-end', type=float, default=0.10)
     parser.add_argument('--batch-size', type=int, default=128)
     parser.add_argument('--buffer-size', type=int, default=500000)
     parser.add_argument('--log-interval', type=int, default=50)

@@ -127,7 +127,8 @@ class CelesteEnv:
         self.step_count = 0
         self.episode_reward = 0
         self.stuck_count = 0
-        
+        self.milestones_hit = set()
+
         player = self._get_player()
         self.prev_y = player.y if player else 128
         self.prev_x = player.x if player else 0
@@ -199,11 +200,18 @@ class CelesteEnv:
         
         reward = 0.0
         
-        # New height bonus (main reward)
+        # New height bonus — progressive multiplier, stronger near the exit
         if player.y < self.best_height_this_episode:
             height_gained = self.best_height_this_episode - player.y
-            reward += height_gained * 1.0
+            progress_scale = max(1.0, (96 - player.y) / 24.0)  # 1x at bottom, 4x near exit
+            reward += height_gained * progress_scale
             self.best_height_this_episode = player.y
+
+        # Milestone bonuses — first time reaching each checkpoint per episode
+        for threshold, bonus in ((40, 20.0), (20, 40.0), (10, 80.0), (0, 150.0)):
+            if player.y < threshold and threshold not in self.milestones_hit:
+                self.milestones_hit.add(threshold)
+                reward += bonus
         
         # Movement bonus (encourage exploration)
         dx = abs(player.x - self.prev_x)
