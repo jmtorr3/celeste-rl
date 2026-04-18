@@ -26,8 +26,7 @@ SIMPLE_ACTIONS = CelesteEnv.SIMPLE_ACTIONS
 def parse_tas(path: str):
     """Parse a .tas file into a list of button-state integers."""
     text = open(path).read().strip()
-    if text.startswith('[]'):
-        text = text[2:]
+    text = text.replace('[', '').replace(']', '')
     return [int(x) for x in text.split(',') if x.strip()]
 
 
