@@ -208,7 +208,7 @@ class CelesteEnv:
             self.best_height_this_episode = player.y
 
         # Milestone bonuses — first time reaching each checkpoint per episode
-        for threshold, bonus in ((40, 20.0), (20, 40.0), (10, 80.0), (0, 150.0)):
+        for threshold, bonus in ((40, 20.0), (20, 40.0), (10, 80.0), (0, 150.0), (-5, 300.0)):
             if player.y < threshold and threshold not in self.milestones_hit:
                 self.milestones_hit.add(threshold)
                 reward += bonus
