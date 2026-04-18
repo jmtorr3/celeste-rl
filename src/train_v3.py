@@ -101,10 +101,12 @@ def train(args):
             start_episode = int(parts[1])
         print(f"Resumed from {args.resume} (episode ~{start_episode})")
 
+    run_id = args.run_id
     save_dir = Path(args.save_dir)
     save_dir.mkdir(exist_ok=True)
     docs_dir = Path('docs')
     docs_dir.mkdir(exist_ok=True)
+    print(f"Run ID: {run_id}")
 
     rewards = []
     heights = []
@@ -137,7 +139,7 @@ def train(args):
 
         if info['max_height'] < best_height:
             best_height = info['max_height']
-            agent.save(str(save_dir / 'v3_best.pt'))
+            agent.save(str(save_dir / f'{run_id}_best.pt'))
 
         ep_num = episode + 1
 
@@ -156,13 +158,13 @@ def train(args):
             )
 
         if ep_num % args.save_interval == 0:
-            ckpt_path = save_dir / f'v3_checkpoint_ep{ep_num}.pt'
+            ckpt_path = save_dir / f'{run_id}_checkpoint_ep{ep_num}.pt'
             agent.save(str(ckpt_path))
             print(f"  [checkpoint -> {ckpt_path}]")
 
-    agent.save(str(save_dir / 'v3_final.pt'))
+    agent.save(str(save_dir / f'{run_id}_final.pt'))
 
-    with open(docs_dir / 'training_v3.pkl', 'wb') as f:
+    with open(docs_dir / f'training_{run_id}.pkl', 'wb') as f:
         pickle.dump({'rewards': rewards, 'heights': heights, 'completions': completions}, f)
 
     print(f"\n{'='*60}")
@@ -235,6 +237,7 @@ def main():
     parser.add_argument('--eval-only', action='store_true')
     parser.add_argument('--eval-episodes', type=int, default=50)
     parser.add_argument('--model', type=str, default=None, help='Model path for eval-only')
+    parser.add_argument('--run-id', type=str, default='v3', help='Prefix for all saved files — use a unique ID per run to avoid overwriting')
     args = parser.parse_args()
 
     if args.eval_only:
