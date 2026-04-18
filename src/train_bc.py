@@ -199,7 +199,7 @@ def evaluate(args):
                 break
 
         heights.append(info['max_height'])
-        if info['max_height'] < -8:
+        if info.get('completed', False):
             completions += 1
             print(f"  Ep {ep+1:>3}: COMPLETE")
         else:

@@ -109,11 +109,23 @@ class CelesteEnv:
         return 31
     
     def _get_player(self):
-        """Get the actual player object (not player_spawn)."""
+        """Get the active player object (not player_spawn)."""
         for obj in self.p8.game.objects:
             if type(obj).__name__ == 'player':
                 return obj
         return None
+
+    def _is_room_transition(self) -> bool:
+        """
+        True when Pyleste has loaded the next room after the player exited.
+        player_spawn presence means a room was just initialised — the player
+        object exists in the new room, not in ours, so _get_player() returns
+        None. Treat this as level complete, NOT as death.
+        """
+        for obj in self.p8.game.objects:
+            if type(obj).__name__ == 'player_spawn':
+                return True
+        return False
     
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         """Reset the environment to initial state."""
@@ -193,10 +205,12 @@ class CelesteEnv:
         player = self._get_player()
         
         if player is None:
-            return -5.0  # Death penalty
-        
+            if self._is_room_transition():
+                return 500.0  # Room exit = level complete
+            return -5.0  # Actual death
+
         if player.y < -8:
-            return 500.0  # Level complete bonus
+            return 500.0  # Level complete bonus (fallback — should be caught above)
         
         reward = 0.0
         
@@ -243,7 +257,7 @@ class CelesteEnv:
         player = self._get_player()
 
         if player is None:
-            return True
+            return True  # either room transition (complete) or death
 
         if player.y < -8:
             return True
@@ -251,6 +265,14 @@ class CelesteEnv:
         if self.stuck_count > 150:
             return True
 
+        return False
+
+    def _is_complete(self) -> bool:
+        """True if the episode ended in a level completion (not death)."""
+        if self._get_player() is None and self._is_room_transition():
+            return True
+        if self._get_player() is not None and self._get_player().y < -8:
+            return True
         return False
     
     def _get_info(self) -> dict:
@@ -267,8 +289,9 @@ class CelesteEnv:
                 "player_spd_y": 0,
                 "max_height": self.max_height_reached,
                 "episode_reward": self.episode_reward,
+                "completed": self._is_complete(),
             }
-        
+
         return {
             "step": self.step_count,
             "player_alive": True,
@@ -281,6 +304,7 @@ class CelesteEnv:
             "dash_time": player.dash_time,
             "max_height": self.max_height_reached,
             "episode_reward": self.episode_reward,
+            "completed": False,  # only set on termination step
         }
     
     def render(self, mode: str = "text") -> Optional[str]:
