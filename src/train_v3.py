@@ -187,7 +187,7 @@ def evaluate(args):
         device=device,
         network_cls=DuelingDQN,
     )
-    model_path = args.model or str(Path(args.save_dir) / 'v3_best.pt')
+    model_path = args.model or str(Path(args.save_dir) / f'{args.run_id}_best.pt')
     agent.load(model_path)
     agent.epsilon = 0.0
     print(f"Loaded {model_path}")

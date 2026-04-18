@@ -9,59 +9,41 @@ The loop within each approach: **train → evaluate → identify weakness → fi
 ## Project Roadmap
 
 ```
-Phase 1 — Fix foundations (professor feedback)        ← YOU ARE HERE
-Phase 2 — DQN iterations (v1 baseline → improved)
-Phase 3 — Behavioral Cloning (TAS data pipeline + BC model)
+Phase 1 — Fix foundations (professor feedback)        ✓ DONE
+Phase 2 — DQN iterations (v1 baseline → improved)     ✓ DONE — result: 0% completion, best height -3
+Phase 3 — Behavioral Cloning (TAS data pipeline + BC model)   ← YOU ARE HERE
 Phase 4 — Hybrid (DQN + TAS pre-loaded replay buffer)
 Phase 5 — Final evaluation and comparison
 ```
 
 ---
 
-## Phase 1 — Required Fixes (Professor Feedback)
+## Phase 1 — Required Fixes (Professor Feedback) ✓ DONE
 
-These must be done before further training. See `docs/professor_feedback_fixes.md` for full details.
-
-- [ ] **Fix coordinate normalization** — `src/environment.py` `_get_obs()` lines 164–165
-      Change `player.x / 64 - 1` → `player.x / 128.0`, same for y
-      Also fix in `src/train_v2.py` `CelesteEnvV2._get_obs()`
-
-- [ ] **Add tile grid to state** — expand state from 6 → 31 dims
-      Append flattened 5×5 tile grid centered on player
-      `0.0` = empty, `1.0` = solid, `-1.0` = hazard/spike
-      Files: `src/environment.py`, `src/train_v2.py`
-      ✓ `game.tile_at(x, y)` already exists in `pyleste/Carts/Celeste.py:568` — no workaround needed
-
-- [ ] **Update `_get_obs_dim()`** — return 31 after tile grid added
+All applied to `src/environment.py`:
+- ✓ Coordinate normalization: `player.x / 64 - 1` → `player.x / 128.0`
+- ✓ 5×5 tile grid added to state (6 → 31 dims) via `game.tile_at(x, y)`
+- ✓ `_get_obs_dim()` returns 31
 
 ---
 
-## Phase 2 — DQN Versions
+## Phase 2 — DQN Versions ✓ DONE
 
-| Version | Script | Best Model | Change |
-|---------|--------|------------|--------|
-| v1 | `src/train.py` | `models/dqn_best.pt` | Baseline DQN |
-| v2 | `src/train_v2.py` | `models/model_v2_best.pt` | Exploration bonuses (position visit counts) |
-| v3 | `src/train_v3.py` | `models/v3_best.pt` | Apply professor fixes (31-dim state, fixed coords) |
-| v4+ | `src/train_v4.py` | `models/v4_best.pt` | Dueling DQN, Double DQN, curriculum, etc. |
+**Result: 0% completion across all runs. Best height reached: -3 (5 pixels from exit). DQN model for final evaluation: `models/v3_r6_best.pt` (or best available from run 6).**
 
-### Creating a new DQN version
+| Version | Script | Change |
+|---------|--------|--------|
+| v1 | `src/train.py` | Baseline DQN, 6-dim state |
+| v2 | `src/train_v2.py` | Exploration bonuses (position visit counts) |
+| v3 | `src/train_v3.py` | Professor fixes (31-dim state) + Dueling/Double DQN + progressive rewards + milestones |
+
+### train_v3.py — always use `--run-id`
+
+Each run saves `{run_id}_best.pt`, `{run_id}_checkpoint_ep{n}.pt`, `{run_id}_final.pt`. **Without a unique run ID, new runs overwrite old models.** A run-4 model reaching height=-3 was lost this way.
 
 ```bash
-cp src/train_v2.py src/train_v3.py
-# edit src/train_v3.py — make one change, update save paths to models/v3_*
-./train.sh -v 3
-./watch.sh -v 3
+python src/train_v3.py --episodes 5000 --epsilon-decay 0.999990 --device cuda --run-id v3_r6
 ```
-
-### DQN improvement ideas (in rough priority)
-
-1. **Apply professor fixes** (tile grid + coord fix) → v3
-2. **Dueling DQN** — swap `DQN` → `DuelingDQN` in `agent.py` (already implemented in `src/network.py`)
-3. **Double DQN** — use policy net to select action, target net to evaluate it (~5 line change in `agent.py:update()`)
-4. **Curriculum** — train on room 0, load checkpoint, continue on rooms 1→2→3
-5. **Prioritized replay** — replay high TD-error transitions more often
-6. **Tune epsilon** — try decay 0.999 (faster) vs 0.9998 (more exploration)
 
 ---
 
@@ -123,24 +105,25 @@ Key experiment: reserve a fixed fraction of the buffer for expert data to preven
 ## Quick Commands
 
 ```bash
-# Train
-./train.sh -v 1                          # DQN baseline
-./train.sh -v 2 -e 5000                  # v2 with more episodes
-./train.sh -v 3                          # new version
-./train.sh -v 3 -m models/v3_checkpoint.pt  # resume
+# Train v3 (always use --run-id)
+python src/train_v3.py --episodes 5000 --epsilon-decay 0.999990 --device cuda --run-id v3_rN
+
+# Resume from checkpoint
+python src/train_v3.py --resume models/v3_rN_checkpoint_ep500.pt --run-id v3_rN --device cuda
+
+# Eval only
+python src/train_v3.py --eval-only --model models/v3_rN_best.pt
 
 # Watch
-./watch.sh -v 1                          # v1 best model
-./watch.sh -v 2 -e 5 -d 0.05            # v2, slow
-./watch.sh -m models/v3_best.pt          # any model by path
+./watch.sh -m models/v3_rN_best.pt
 
 # Evaluate
-python scripts/evaluate.py --model models/v3_best.pt --episodes 100 --baseline
+python scripts/evaluate.py --model models/v3_rN_best.pt --episodes 100 --baseline
 
-# Google Drive sync
-./sync_models.sh push     # after training — upload models/
-./sync_models.sh pull     # on new machine — download models/
-./sync_models.sh status   # check what's out of sync
+# Google Drive sync — push after EVERY run before starting a new one
+./sync_models.sh push
+./sync_models.sh pull     # on new machine
+./sync_models.sh status
 ```
 
 ---
@@ -161,15 +144,17 @@ Final comparison: Random → DQN → BC → Hybrid → TAS (upper bound)
 
 ## Model Naming Convention
 
-| Version | Best | Checkpoint | Final |
-|---------|------|------------|-------|
-| v1 (legacy) | `models/dqn_best.pt` | `models/dqn_checkpoint.pt` | `models/dqn_final.pt` |
-| v2 (legacy) | `models/model_v2_best.pt` | — | `models/model_v2_final.pt` |
-| v3+ | `models/v3_best.pt` | `models/v3_checkpoint.pt` | `models/v3_final.pt` |
-| BC | `models/bc_best.pt` | — | `models/bc_final.pt` |
-| Hybrid | `models/hybrid_best.pt` | `models/hybrid_checkpoint.pt` | `models/hybrid_final.pt` |
+All v3+ models use a `--run-id` prefix to avoid overwrites. BC and Hybrid follow the same pattern.
 
-All `models/*.pt` are gitignored — sync to Google Drive with `./sync_models.sh`.
+| Model | Files |
+|-------|-------|
+| v1 (legacy) | `models/dqn_best.pt`, `models/dqn_final.pt` |
+| v2 (legacy) | `models/model_v2_best.pt`, `models/model_v2_final.pt` |
+| v3 run N | `models/v3_rN_best.pt`, `models/v3_rN_checkpoint_ep{n}.pt`, `models/v3_rN_final.pt` |
+| BC | `models/bc_best.pt`, `models/bc_final.pt` |
+| Hybrid | `models/hybrid_best.pt`, `models/hybrid_checkpoint_ep{n}.pt`, `models/hybrid_final.pt` |
+
+All `models/*.pt` are gitignored — sync to Google Drive with `./sync_models.sh`. **Push after every run.**
 
 ---
 

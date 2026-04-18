@@ -57,11 +57,12 @@ pip install -r requirements.txt
 
 ### Environment (`src/environment.py`)
 
-The agent observes a 6-dimensional state:
-- Player position (x, y) — normalized
-- Player velocity (spd.x, spd.y) — normalized
-- Grace frames (coyote time)
+The agent observes a **31-dimensional state**:
+- Player position (x/128, y/128) — normalized to [0, 1]
+- Player velocity (spd.x/4, spd.y/4)
+- Grace frames (coyote time, /6)
 - Dash availability
+- 5×5 tile grid centered on player (25 values from `game.tile_at`)
 
 And can take 15 actions:
 - Nothing, Left, Right
@@ -71,32 +72,42 @@ And can take 15 actions:
 ### Reward Function
 
 ```python
-reward = 0
-if reached_new_height:
-    reward += height_gained * 1.0  # Bonus for upward progress
-if is_moving:
-    reward += 0.01                  # Small exploration bonus
-if stuck_too_long:
-    reward -= 0.1                   # Penalty for inaction
-reward -= 0.01                      # Time penalty per step
-# Death: -5.0 | Level complete: +100.0
+# Progressive height bonus — stronger near the exit
+progress_scale = max(1.0, (96 - player.y) / 24.0)  # 1x at start, 4x near exit
+reward += height_gained * progress_scale
+
+# Milestone bonuses (first time per episode)
+# y<40: +20 | y<20: +40 | y<10: +80 | y<0: +150 | y<-5: +300
+
+# Small bonuses/penalties
+reward += 0.01   # movement bonus
+reward -= 0.1    # stuck penalty (after 30 stationary frames)
+reward -= 0.01   # time penalty per step
+
+# Terminal rewards
+# Death: -5.0 | Level complete: +500.0
+
+# Early termination if stuck_count > 150
 ```
 
 ### Network Architecture (`src/network.py`)
 
-Two architectures available:
-- **DQN**: `Input(6) → Dense(256) → ReLU → Dense(256) → ReLU → Dense(128) → ReLU → Output(15)`
-- **DuelingDQN**: Shared features → separate value and advantage streams
+Two architectures available (train_v3 uses DuelingDQN + Double DQN):
+- **DQN**: `Input(31) → Dense(256) → ReLU → Dense(256) → ReLU → Dense(128) → ReLU → Output(15)`
+- **DuelingDQN**: Shared features → separate value and advantage streams, combined as `Q = V + (A - mean(A))`
 
 ## Quick Start
 
 ### Train an agent
 ```bash
-./train.sh                              # DQN, 3000 episodes, room 0
-./train.sh -v2                          # train_v2 (exploration bonuses)
-./train.sh -e 5000 -r 2                 # 5000 episodes, room 2
-./train.sh -m models/dqn_best.pt        # continue from checkpoint
-./train.sh --eval-only -m models/dqn_best.pt
+# Always pass a unique --run-id to avoid overwriting models from other runs
+python src/train_v3.py --episodes 5000 --epsilon-decay 0.999990 --device cuda --run-id my_run
+
+# Resume from checkpoint
+python src/train_v3.py --resume models/my_run_checkpoint_ep500.pt --run-id my_run --device cuda
+
+# Eval only
+python src/train_v3.py --eval-only --model models/my_run_best.pt
 ```
 
 ### Watch a trained agent play
