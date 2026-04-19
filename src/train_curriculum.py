@@ -42,8 +42,9 @@ STAGES = [
     (15,  97,  100, "Stage 1 — y=15  (exit approach)"),
     (30,  89,  150, "Stage 2 — y=30  (upper section)"),
     (50,  79,  200, "Stage 3 — y=50  (mid-level)"),
-    (71,  88,  300, "Stage 4 — y=71  (lower-mid)"),
-    (96,  None, 500, "Stage 5 — y=96  (full level)"),  # normal spawn, no teleport
+    (60,  89,  250, "Stage 4 — y=60  (mid-lower bridge)"),
+    (71,  88,  300, "Stage 5 — y=71  (lower-mid)"),
+    (96,  None, 500, "Stage 6 — y=96  (full level)"),  # normal spawn, no teleport
 ]
 
 
@@ -310,8 +311,8 @@ def main():
     parser.add_argument('--log-interval', type=int, default=50)
     parser.add_argument('--save-dir', type=str, default='models')
     parser.add_argument('--device', type=str, default='auto', choices=['auto', 'cuda', 'cpu'])
-    parser.add_argument('--start-stage', type=int, default=1, choices=[1, 2, 3, 4, 5],
-                        help='Start from this stage (1=exit, 5=full level)')
+    parser.add_argument('--start-stage', type=int, default=1, choices=[1, 2, 3, 4, 5, 6],
+                        help='Start from this stage (1=exit, 6=full level)')
     parser.add_argument('--resume', type=str, default=None,
                         help='Resume from a checkpoint (implies --start-stage)')
     parser.add_argument('--eval-only', action='store_true')
