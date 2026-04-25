@@ -29,6 +29,8 @@ class CelesteEnv:
         dash_time: Frames remaining in dash (int)
     """
     
+    OBS_DIM = 31  # 6 scalar features + 5x5 tile grid
+    
     # Common useful actions (reduced action space)
     SIMPLE_ACTIONS = [
         0,   # nothing
@@ -48,14 +50,12 @@ class CelesteEnv:
         42,  # dash + down + right
     ]
     
-    ALL_ACTIONS = list(range(64))
+
     
     def __init__(
         self,
         room: int = 0,
         max_steps: int = 1000,
-        use_simple_actions: bool = True,
-        custom_actions: Optional[List[int]] = None,
     ):
         """
         Initialize the Celeste environment.
@@ -68,13 +68,7 @@ class CelesteEnv:
         """
         self.room = room
         self.max_steps = max_steps
-        
-        if custom_actions is not None:
-            self.actions = custom_actions
-        elif use_simple_actions:
-            self.actions = self.SIMPLE_ACTIONS
-        else:
-            self.actions = self.ALL_ACTIONS
+        self.actions = self.SIMPLE_ACTIONS
         
         self.n_actions = len(self.actions)
         
@@ -172,24 +166,31 @@ class CelesteEnv:
         player = self._get_player()
         
         if player is None:
-            return np.zeros(self._get_obs_dim(), dtype=np.float32)
-        
+            return np.zeros(self.OBS_DIM, dtype=np.float32) 
+               
+        # Convert player position to tile position
+        # Tiles are 8x8 pixels in PICO-8
         tile_x = int(player.x / 8)
         tile_y = int(player.y / 8)
         tile_grid = []
+        
+        # 5×5 window of tiles centered on the player
         for dy in range(-2, 3):
             for dx in range(-2, 3):
+                # Map is 16x16 pixels
                 tx = max(0, min(15, tile_x + dx))
                 ty = max(0, min(15, tile_y + dy))
                 tile_grid.append(float(self.p8.game.tile_at(tx, ty)))
-
+                
+        # Normalize each value to be 0-1
         obs = np.array([
-            player.x / 128.0,
-            player.y / 128.0,
-            player.spd.x / 4,
-            player.spd.y / 4,
-            player.grace / 6,
-            float(player.djump),
+            player.x / 128.0, # x position
+            player.y / 128.0, # y position
+            player.spd.x / 4, # x vel
+            player.spd.y / 4, # y vel
+            # 6 frames after after walking off ledge where jump is still available
+            player.grace / 6, 
+            float(player.djump), # 0 or 1, dash available?
             *tile_grid,
         ], dtype=np.float32)
 
@@ -204,30 +205,39 @@ class CelesteEnv:
         """
         player = self._get_player()
         
+        
+        # TERMINAL EVENTS
+        # Player object disappears on death or room exit
         if player is None:
             if self._is_room_transition():
                 return 500.0  # Room exit = level complete
             return -5.0  # Actual death
-
-        if player.y < -8:
-            return 500.0  # Level complete bonus (fallback — should be caught above)
         
         reward = 0.0
         
-        # New height bonus — progressive multiplier, stronger near the exit
+        # HEIGHT PROGRESS BONUS
+        
         if player.y < self.best_height_this_episode:
             height_gained = self.best_height_this_episode - player.y
-            progress_scale = max(1.0, (96 - player.y) / 24.0)  # 1x at bottom, 4x near exit
+            progress_scale = max(1.0, (96 - player.y) / 24.0)  # Moving on to next fourth of the level multiplies reward
             reward += height_gained * progress_scale
             self.best_height_this_episode = player.y
 
-        # Milestone bonuses — first time reaching each checkpoint per episode
+
+        #  MILESTONE BONUSES
+        # One-time bonus the first time the player crosses each checkpoint.
+        # Bonuses grow larger closer to the exit to reinforce the final push.
+        # milestones_hit is a set so each threshold only fires once per episode.
+        
         for threshold, bonus in ((40, 20.0), (20, 40.0), (10, 80.0), (0, 150.0), (-5, 300.0)):
             if player.y < threshold and threshold not in self.milestones_hit:
                 self.milestones_hit.add(threshold)
                 reward += bonus
         
-        # Movement bonus (encourage exploration)
+        # MOVEMENT BONUS / STUCK PENALTY
+        # Small reward for any movement to encourage exploration.
+        # If the player hasn't moved for 30+ frames, apply an escalating penalty
+        # to discourage the agent from freezing in place.
         dx = abs(player.x - self.prev_x)
         dy = abs(player.y - self.prev_y)
         movement = dx + dy
@@ -259,21 +269,17 @@ class CelesteEnv:
         if player is None:
             return True  # either room transition (complete) or death
 
-        if player.y < -8:
-            return True
-
-        if self.stuck_count > 150:
+        if self.stuck_count > 150: # stuck for 150 frames end episode
             return True
 
         return False
 
     def _is_complete(self) -> bool:
-        """True if the episode ended in a level completion (not death)."""
-        if self._get_player() is None and self._is_room_transition():
-            return True
-        if self._get_player() is not None and self._get_player().y < -8:
-            return True
-        return False
+        player = self._get_player()
+        if player is None:
+            return self._is_room_transition()
+        # Fallback, since once level is complete player goes into "negative" pixels
+        return player.y < -8
     
     def _get_info(self) -> dict:
         """Get additional info about current state."""
