@@ -96,7 +96,11 @@ class CelesteEnv:
     @property
     def observation_space(self):
         """Observation space shape."""
-        return (self.OBS_DIM,)
+        return (self._get_obs_dim(),)
+    
+    def _get_obs_dim(self) -> int:
+        """Get observation dimension."""
+        return 31
     
     def _get_player(self):
         """Get the active player object (not player_spawn)."""

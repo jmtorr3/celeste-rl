@@ -85,7 +85,7 @@ class CurriculumEnv(CelesteEnvV3):
 def make_agent(args, device):
     dummy_env = CelesteEnv()
     return DQNAgent(
-        state_dim=dummy_env._get_obs_dim(),
+        state_dim=(dummy_env._get_obs_dim()),
         action_dim=dummy_env.n_actions,
         lr=args.lr,
         gamma=0.99,
