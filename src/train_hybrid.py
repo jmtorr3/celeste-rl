@@ -24,10 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 
-from src.train_v3 import CelesteEnvV3
 from src.agent import DQNAgent
 from src.environment import CelesteEnv
-from src.network import DuelingDQN
+from src.network import DQN
 
 
 class HybridBuffer:
@@ -81,7 +80,7 @@ class HybridBuffer:
         return len(self.expert) + len(self.online)
 
 
-def build_expert_transitions(tas_path: str, env: CelesteEnvV3):
+def build_expert_transitions(tas_path: str, env: CelesteEnv):
     """
     Convert (obs, action_idx) TAS pairs into full (s, a, r, s', done) transitions
     by stepping through the environment.
@@ -108,7 +107,7 @@ def build_expert_transitions(tas_path: str, env: CelesteEnvV3):
 
 
 def train(args):
-    env = CelesteEnvV3(room=args.room, max_steps=args.max_steps)
+    env = CelesteEnv(room=args.room, max_steps=args.max_steps)
 
     device = args.device
     if device == 'auto':
@@ -135,7 +134,7 @@ def train(args):
         batch_size=args.batch_size,
         buffer_size=args.buffer_size,
         device=device,
-        network_cls=DuelingDQN,
+        network_cls=DQN,
     )
 
     # Replace standard buffer with HybridBuffer
@@ -242,7 +241,7 @@ def evaluate(args):
         state_dim=env._get_obs_dim(),
         action_dim=env.n_actions,
         device=device,
-        network_cls=DuelingDQN,
+        network_cls=DQN,
     )
     from src.utils.paths import run_dir
     model_path = args.model or str(run_dir(args.run_id) / 'best.pt')
