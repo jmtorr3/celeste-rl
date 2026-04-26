@@ -108,6 +108,14 @@ def train(args):
 
     best_val_acc = 0.0
     best_val_loss = float('inf')
+    best_val_epoch = 0
+
+    history = {
+        'train_loss': [],
+        'train_acc': [],
+        'val_loss': [],
+        'val_acc': [],
+    }
 
     print("=" * 60)
     print(f"TRAINING BC  |  epochs={args.epochs}  lr={args.lr}  noise={args.noise_std}")
@@ -150,8 +158,14 @@ def train(args):
         val_loss /= val_size
         val_acc = val_correct / val_size
 
+        history['train_loss'].append(train_loss)
+        history['train_acc'].append(train_acc)
+        history['val_loss'].append(val_loss)
+        history['val_acc'].append(val_acc)
+
         if val_acc > best_val_acc:
             best_val_acc = val_acc
+            best_val_epoch = epoch
             torch.save(model.state_dict(), rdir / 'best.pt')
 
         if epoch % args.log_interval == 0:
@@ -163,8 +177,61 @@ def train(args):
             )
 
     torch.save(model.state_dict(), rdir / 'final.pt')
-    print(f"\nBest val accuracy: {best_val_acc:.3f}")
-    print(f"Saved best.pt and final.pt to {rdir}")
+
+    # Save training history pickle for later analysis
+    import pickle
+    with open(rdir / f'{args.run_id}_training.pkl', 'wb') as f:
+        pickle.dump({
+            'history': history,
+            'best_val_acc': best_val_acc,
+            'best_val_epoch': best_val_epoch,
+        }, f)
+
+    plot_bc_curve(args.run_id, history, best_val_epoch, rdir)
+
+    print(f"\nBest val accuracy: {best_val_acc:.3f} (epoch {best_val_epoch})")
+    print(f"Saved best.pt, final.pt, {args.run_id}_training.pkl, {args.run_id}_curve.png to {rdir}")
+
+
+def plot_bc_curve(run_id, history, best_epoch, save_dir):
+    """Two-panel plot: loss and accuracy curves for BC training."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib not installed, skipping plot")
+        return
+
+    epochs = range(1, len(history['train_loss']) + 1)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+    fig.suptitle(f'BC training run: {run_id}', fontsize=14, fontweight='bold')
+
+    ax1.plot(epochs, history['train_loss'], label='Train loss', linewidth=2)
+    ax1.plot(epochs, history['val_loss'], label='Val loss', linewidth=2)
+    ax1.axvline(x=best_epoch, color='g', linestyle=':', alpha=0.5,
+                label=f'Best val acc @ ep{best_epoch}')
+    ax1.set_ylabel('Cross-entropy loss')
+    ax1.set_title('Loss')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(epochs, history['train_acc'], label='Train acc', linewidth=2)
+    ax2.plot(epochs, history['val_acc'], label='Val acc', linewidth=2)
+    ax2.axvline(x=best_epoch, color='g', linestyle=':', alpha=0.5)
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Action-classification accuracy')
+    ax2.set_title('Accuracy')
+    ax2.set_ylim(0, 1)
+    ax2.legend(loc='lower right')
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    out = save_dir / f'{run_id}_curve.png'
+    plt.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"Saved BC curve to {out}")
 
 
 def evaluate(args):
