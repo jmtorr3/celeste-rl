@@ -145,14 +145,24 @@ def resolve_model_path(args):
     raise SystemExit("Must provide --run-id or --model")
 
 
+def resolve_output_path(args):
+    if args.output:
+        return args.output
+    if args.run_id:
+        run_dir = os.path.join("runs", args.run_id)
+        os.makedirs(run_dir, exist_ok=True)
+        return os.path.join(run_dir, f"{args.run_id}_demo.gif")
+    return "demo.gif"
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Record a GIF of a successful agent run")
     parser.add_argument("--run-id", type=str, default=None,
                         help="Run ID — resolves to runs/{run_id}/best.pt")
     parser.add_argument("--model", type=str, default=None,
                         help="Explicit model path (overrides --run-id)")
-    parser.add_argument("--output", type=str, default="demo.gif",
-                        help="Output GIF path (default: demo.gif)")
+    parser.add_argument("--output", type=str, default=None,
+                        help="Output GIF path (default: runs/{run_id}/{run_id}_demo.gif)")
     parser.add_argument("--epsilon", type=float, default=0.05,
                         help="Exploration rate during recording (default: 0.05)")
     parser.add_argument("--fps", type=int, default=20,
@@ -166,9 +176,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     model_path = resolve_model_path(args)
+    output_path = resolve_output_path(args)
     record_run(
         model_path,
-        output=args.output,
+        output=output_path,
         epsilon=args.epsilon,
         max_attempts=args.max_attempts,
         fps=args.fps,
