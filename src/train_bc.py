@@ -179,7 +179,6 @@ def train(args):
     torch.save(model.state_dict(), rdir / 'final.pt')
 
     # Save training history pickle for later analysis
-    import pickle
     with open(rdir / f'{args.run_id}_training.pkl', 'wb') as f:
         pickle.dump({
             'history': history,
