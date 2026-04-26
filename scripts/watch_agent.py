@@ -79,7 +79,7 @@ def watch_agent(
                 
                 if terminated or truncated:
                     print("\n" + "-" * 50)
-                    if info['player_alive'] and info.get('player_y', 999) < -8:
+                    if info.get('completed', False):
                         print("🎉 LEVEL COMPLETE!")
                     elif not info['player_alive']:
                         print("💀 DIED")
