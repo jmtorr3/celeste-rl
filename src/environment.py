@@ -167,18 +167,34 @@ class CelesteEnv:
             return np.zeros(self.OBS_DIM, dtype=np.float32) 
                
         # Convert player position to tile position
-        # Tiles are 8x8 pixels in PICO-8
+        # Tiles are 8x8 pixels, room is 16x16 tiles
         tile_x = int(player.x / 8)
         tile_y = int(player.y / 8)
         tile_grid = []
-        
-        # 9×9 window of tiles centered on the player
+
+        # 9×9 window of tiles centered on the player.
+        # Encode semantically (raw tile IDs are unnormalized 0-255 noise to a NN):
+        #   -2.0 = out-of-bounds (sentinel — distinguishes wall from edge of room)
+        #   -1.0 = spike (death)
+        #    0.0 = empty / air
+        #    1.0 = solid (landable platform / wall)
+        #    0.5 = other (decoration, fruit, etc.)
         for dy in range(-4, 5):
             for dx in range(-4, 5):
-                # Map is 16x16 pixels
-                tx = max(0, min(15, tile_x + dx))
-                ty = max(0, min(15, tile_y + dy))
-                tile_grid.append(float(self.p8.game.tile_at(tx, ty)))
+                tx = tile_x + dx
+                ty = tile_y + dy
+                if not (0 <= tx < 16 and 0 <= ty < 16):
+                    tile_grid.append(-2.0)
+                    continue
+                tile = self.p8.game.tile_at(tx, ty)
+                if tile == 0:
+                    tile_grid.append(0.0)
+                elif tile in (17, 27, 43, 59):
+                    tile_grid.append(-1.0)
+                elif self.p8.fget(tile, 0):
+                    tile_grid.append(1.0)
+                else:
+                    tile_grid.append(0.5)
                 
         # Normalize each value to be 0-1
         obs = np.array([
