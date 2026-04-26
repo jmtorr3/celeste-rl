@@ -198,13 +198,25 @@ class DQNAgent:
         }, path)
     
     def load(self, path: str):
-        """Load model weights and training state."""
+        """Load model weights and (optionally) training state.
+
+        Accepts two checkpoint formats:
+        1. Full DQNAgent checkpoint dict (policy_net + target_net + optimizer + epsilon + steps)
+        2. Plain `state_dict()` from a network — used by BC training (`train_bc.py`).
+           In this case only the policy net is loaded; target net is set to a copy of policy.
+        """
         checkpoint = torch.load(path, map_location=self.device)
-        self.policy_net.load_state_dict(checkpoint['policy_net'])
-        self.target_net.load_state_dict(checkpoint['target_net'])
-        self.optimizer.load_state_dict(checkpoint['optimizer'])
-        self.epsilon = checkpoint['epsilon']
-        self.steps = checkpoint['steps']
+
+        if isinstance(checkpoint, dict) and 'policy_net' in checkpoint:
+            self.policy_net.load_state_dict(checkpoint['policy_net'])
+            self.target_net.load_state_dict(checkpoint['target_net'])
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.epsilon = checkpoint['epsilon']
+            self.steps = checkpoint['steps']
+        else:
+            # Plain state_dict — load into policy net, mirror to target.
+            self.policy_net.load_state_dict(checkpoint)
+            self.target_net.load_state_dict(checkpoint)
 
 
 if __name__ == "__main__":

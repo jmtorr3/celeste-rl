@@ -40,6 +40,8 @@ def train(
     
     episode_rewards = []
     episode_heights = []
+    completions_log = []
+    total_completions = 0
     best_reward = float('-inf')
     best_height = float('inf')
     
@@ -68,25 +70,31 @@ def train(
         
         episode_rewards.append(episode_reward)
         episode_heights.append(info['max_height'])
-        
+        completed = info.get('completed', False)
+        completions_log.append(completed)
+        if completed:
+            total_completions += 1
+
         # Save best model (by height reached)
         if info['max_height'] < best_height:
             best_height = info['max_height']
             agent.save(save_path / "best.pt")
-        
+
         if episode_reward > best_reward:
             best_reward = episode_reward
-        
+
         # Logging
         if (episode + 1) % log_interval == 0:
             avg_reward = np.mean(episode_rewards[-log_interval:])
             avg_height = np.mean(episode_heights[-log_interval:])
             min_height = min(episode_heights[-log_interval:])
-            
+            recent_complete = sum(1 for c in completions_log[-log_interval:] if c)
+
             print(f"\nEpisode {episode + 1}/{num_episodes}")
             print(f"  Avg Reward:  {avg_reward:.2f}")
             print(f"  Avg Height:  {avg_height:.1f}")
             print(f"  Best Height: {min_height:.1f} (this batch), {best_height:.1f} (overall)")
+            print(f"  Complete:    {recent_complete}/{log_interval} recent, {total_completions} total")
             print(f"  Epsilon:     {agent.epsilon:.3f}")
             print(f"  Buffer:      {len(agent.buffer)}")
         
@@ -98,7 +106,7 @@ def train(
     # Save final model
     agent.save(save_path / "final.pt")
     
-    return episode_rewards, episode_heights
+    return episode_rewards, episode_heights, completions_log
 
 
 def evaluate(env: CelesteEnv, agent: DQNAgent, num_episodes: int = 20):
@@ -187,6 +195,15 @@ def main():
     parser.add_argument("--max-steps", type=int, default=500, help="Max steps per episode")
     parser.add_argument("--room", type=int, default=0, help="Room number (0-30)")
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
+    parser.add_argument("--epsilon-decay", type=float, default=0.999990,
+                        help="Epsilon decay factor per episode")
+    parser.add_argument("--epsilon-end", type=float, default=0.05,
+                        help="Final epsilon floor")
+    parser.add_argument("--buffer-size", type=int, default=500000,
+                        help="Replay buffer size")
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--device", type=str, default="auto",
+                        choices=["auto", "cuda", "cpu"])
     parser.add_argument("--eval-only", action="store_true", help="Only evaluate")
     parser.add_argument("--model", type=str, default=None, help="Model to load")
     parser.add_argument("--run-id", type=str, default="dqn", help="Prefix for saved files / plot title")
@@ -197,7 +214,7 @@ def main():
     print("=" * 60)
     
     # Create environment
-    env = CelesteEnv(room=args.room, max_steps=args.max_steps, use_simple_actions=True)
+    env = CelesteEnv(room=args.room, max_steps=args.max_steps)
     
     state_dim = env._get_obs_dim()
     action_dim = env.n_actions
@@ -207,21 +224,24 @@ def main():
     print(f"  State dim:  {state_dim}")
     print(f"  Action dim: {action_dim}")
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = args.device
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"  Device:     {device}")
-    
-    # Create agent
+
+    # Create agent — plain DQN (NO Dueling). This script is the architectural
+    # ablation against train_v3 (which uses DuelingDQN with everything else equal).
     agent = DQNAgent(
         state_dim=state_dim,
         action_dim=action_dim,
         lr=args.lr,
         gamma=0.99,
         epsilon_start=1.0,
-        epsilon_end=0.05,
-        epsilon_decay=0.9995,
-        batch_size=128,
-        buffer_size=200000,
-        device=device
+        epsilon_end=args.epsilon_end,
+        epsilon_decay=args.epsilon_decay,
+        batch_size=args.batch_size,
+        buffer_size=args.buffer_size,
+        device=device,
     )
     
     # Load model if specified
@@ -233,7 +253,7 @@ def main():
         evaluate(env, agent, num_episodes=20)
     else:
         # Train
-        rewards, heights = train(
+        rewards, heights, completions_log = train(
             env=env,
             agent=agent,
             run_id=args.run_id,
@@ -246,10 +266,15 @@ def main():
         from src.utils.paths import run_dir
         rdir = run_dir(args.run_id)
         with open(rdir / f"{args.run_id}_training.pkl", "wb") as f:
-            pickle.dump({'rewards': rewards, 'heights': heights}, f)
+            pickle.dump({
+                'rewards': rewards,
+                'heights': heights,
+                'completions_log': completions_log,
+                'completions': sum(completions_log),
+            }, f)
 
         from src.utils.plot import plot_run
-        plot_run(args.run_id, rewards, heights, save_dir=str(rdir))
+        plot_run(args.run_id, rewards, heights, completions=completions_log, save_dir=str(rdir))
         
         # Evaluate
         evaluate(env, agent, num_episodes=20)

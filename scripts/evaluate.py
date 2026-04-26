@@ -1,10 +1,14 @@
 """
 Evaluate a trained agent on Celeste room 0.
 
+Architecture (DQN vs DuelingDQN) is auto-detected from the checkpoint.
+Use --dueling / --no-dueling to override.
+
 Usage:
-    python scripts/evaluate.py --run-id v3_r9 --epsilon 0.05 --dueling
-    python scripts/evaluate.py --model runs/v3_r9/checkpoint_ep1950.pt --episodes 100 --epsilon 0.05 --dueling
-    python scripts/evaluate.py --baseline                       # random-action baseline only
+    python scripts/evaluate.py --run-id v3_r9 --epsilon 0.05
+    python scripts/evaluate.py --run-id dqn_r1 --epsilon 0.05 --episodes 100
+    python scripts/evaluate.py --model runs/v3_r9/checkpoint_ep1950.pt --epsilon 0.05
+    python scripts/evaluate.py --baseline-only                  # random-action baseline only
 """
 
 import argparse
@@ -12,6 +16,7 @@ import os
 import sys
 
 import numpy as np
+import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -20,8 +25,36 @@ from src.agent import DQNAgent
 from src.network import DuelingDQN
 
 
-def evaluate_agent(model_path, room=0, num_episodes=100, epsilon=0.0, dueling=False, max_steps=1000):
+def detect_architecture(model_path):
+    """Inspect a checkpoint and decide whether it was saved by DuelingDQN or plain DQN.
+
+    Returns 'dueling' or 'dqn'. Raises if neither matches.
+    """
+    ckpt = torch.load(model_path, map_location='cpu')
+    if isinstance(ckpt, dict) and 'policy_net' in ckpt:
+        sd = ckpt['policy_net']
+    else:
+        sd = ckpt
+    keys = list(sd.keys())
+    if any('value_stream' in k or 'advantage_stream' in k for k in keys):
+        return 'dueling'
+    if any(k.startswith('network.') for k in keys):
+        return 'dqn'
+    raise ValueError(f"Cannot detect architecture from keys: {keys[:4]}...")
+
+
+def evaluate_agent(model_path, room=0, num_episodes=100, epsilon=0.0, dueling=None, max_steps=1000):
+    """Evaluate a trained model. If dueling=None, auto-detect architecture from the checkpoint."""
     env = CelesteEnv(room=room, max_steps=max_steps)
+
+    if dueling is None:
+        try:
+            arch = detect_architecture(model_path)
+            dueling = (arch == 'dueling')
+            print(f"Auto-detected architecture: {arch}")
+        except (FileNotFoundError, ValueError) as e:
+            print(f"Warning: {e}. Defaulting to plain DQN.")
+            dueling = False
 
     agent = DQNAgent(
         state_dim=env._get_obs_dim(),
@@ -136,8 +169,10 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--epsilon", type=float, default=0.0,
                         help="Exploration rate during eval (0.0 = deterministic)")
-    parser.add_argument("--dueling", action="store_true",
-                        help="Use DuelingDQN architecture (required for v3+/hybrid/curriculum models)")
+    parser.add_argument("--dueling", action="store_true", default=None,
+                        help="Force DuelingDQN architecture. Default: auto-detect from checkpoint.")
+    parser.add_argument("--no-dueling", dest="dueling", action="store_false",
+                        help="Force plain DQN architecture (overrides auto-detect).")
     parser.add_argument("--max-steps", type=int, default=1000)
     parser.add_argument("--baseline", action="store_true",
                         help="Also run a random-action baseline for comparison")

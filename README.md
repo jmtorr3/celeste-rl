@@ -159,19 +159,74 @@ The script retries until it captures a *successful* episode, so failed attempts 
 
 ## Evaluate a checkpoint
 
+Architecture (DQN vs DuelingDQN) is **auto-detected from the checkpoint** — no need to remember which run uses which.
+
 ```bash
 # By run id (loads runs/{id}/best.pt)
-python scripts/evaluate.py --run-id v3_r9 --epsilon 0.05 --dueling --episodes 100
+python scripts/evaluate.py --run-id v3_r9 --epsilon 0.05 --episodes 100
 
 # By explicit checkpoint path
 python scripts/evaluate.py --model runs/v3_r9/checkpoint_ep1950.pt \
-  --epsilon 0.05 --dueling --episodes 100
+  --epsilon 0.05 --episodes 100
 
 # Random-action baseline (no model)
 python scripts/evaluate.py --baseline-only --episodes 100
+
+# Force a specific architecture if auto-detect picks wrong
+python scripts/evaluate.py --run-id v3_r9 --epsilon 0.05 --dueling
+python scripts/evaluate.py --run-id dqn_r1 --epsilon 0.05 --no-dueling
 ```
 
-`--epsilon 0.05` is usually what you want — matches training-time noise, gives an honest "real-world performance" number. `--epsilon 0` is pure greedy and often misleading because of the `best.pt` saving bug (see `final_log.md`).
+`--epsilon 0.05` is usually what you want — matches training-time noise, gives an honest "real-world performance" number. `--epsilon 0` is pure greedy and often misleading because of the `best.pt` saving bug (see Things to watch out for).
+
+## Reproducing the comparison results
+
+To regenerate every row of the comparison table from scratch on a CUDA-capable machine. Total time: ~9-10 hours on a single GPU (sequential).
+
+```bash
+# 1. Setup
+git clone https://github.com/jmtorr3/celeste-rl.git
+cd celeste-rl
+python3 -m venv celeste-venv
+source celeste-venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Regenerate TAS expert data with current 87-dim semantic env
+python scripts/export_tas.py --room 0
+# → data/tas_transitions.pkl  (66 transitions, 87-dim states)
+
+# 3. Train all four methods (each ~2-3h on GPU)
+python src/train.py        --run-id dqn_r1     --device cuda --episodes 5000 --epsilon-decay 0.999990 --epsilon-end 0.05
+python src/train_v3.py     --run-id v3_r9      --device cuda --episodes 5000 --epsilon-decay 0.999990 --epsilon-end 0.05
+python src/train_bc.py     --run-id bc_r2      --device cuda --epochs 200
+python src/train_hybrid.py --run-id hybrid_r2  --device cuda --episodes 5000 --epsilon-decay 0.999990 --epsilon-end 0.05
+
+# 4. Evaluate all methods + random baseline (100 episodes each, ε=0.05)
+python scripts/evaluate.py --run-id dqn_r1     --epsilon 0.05 --episodes 100
+python scripts/evaluate.py --run-id v3_r9      --epsilon 0.05 --episodes 100
+python scripts/evaluate.py --run-id bc_r2      --epsilon 0.05 --episodes 100
+python scripts/evaluate.py --run-id hybrid_r2  --epsilon 0.05 --episodes 100
+python scripts/evaluate.py --baseline-only --episodes 100
+
+# 5. (Optional) Evaluate a specific peak checkpoint instead of best.pt
+#    (best.pt is sometimes misleading — see "Things to watch out for")
+python scripts/evaluate.py --model runs/dqn_r1/checkpoint_ep5000.pt --epsilon 0.05 --episodes 100
+python scripts/evaluate.py --model runs/v3_r9/checkpoint_ep1950.pt  --epsilon 0.05 --episodes 100
+```
+
+Per-run training curves land in `runs/{run_id}/{run_id}_curve.png`.
+
+### Expected results (room 0, ε=0.05 eval, 100 episodes)
+
+| Method | Run ID | Lifetime completion / 5000 | Peak window |
+|---|---|---|---|
+| Random | — | 0% | — |
+| BC alone | bc_r2 | n/a (no training loop) | — |
+| Plain DQN, semantic | **dqn_r1** | **35.7%** | **86% (ep 5000)** |
+| Dueling DQN + curiosity, semantic | v3_r9 | 22.8% | 64% (ep 1950) |
+| Hybrid (BC + DQN) | hybrid_r2 | 2.9% | low |
+
+Plain DQN with semantic tile encoding wins by a wide margin. Adding Dueling architecture or BC warm-start with the current expert-transition reward handling both hurt performance.
 
 ## Run-id conventions
 
