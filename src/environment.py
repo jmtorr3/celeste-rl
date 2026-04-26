@@ -29,7 +29,7 @@ class CelesteEnv:
         dash_time: Frames remaining in dash (int)
     """
     
-    OBS_DIM = 31  # 6 scalar features + 5x5 tile grid
+    OBS_DIM = 87  # 6 scalar features + 9x9 tile grid
     
     # Common useful actions (reduced action space)
     SIMPLE_ACTIONS = [
@@ -174,9 +174,9 @@ class CelesteEnv:
         tile_y = int(player.y / 8)
         tile_grid = []
         
-        # 5×5 window of tiles centered on the player
-        for dy in range(-2, 3):
-            for dx in range(-2, 3):
+        # 9×9 window of tiles centered on the player
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
                 # Map is 16x16 pixels
                 tx = max(0, min(15, tile_x + dx))
                 ty = max(0, min(15, tile_y + dy))
