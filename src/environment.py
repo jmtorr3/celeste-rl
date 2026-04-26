@@ -100,7 +100,7 @@ class CelesteEnv:
     
     def _get_obs_dim(self) -> int:
         """Get observation dimension."""
-        return 31
+        return self.OBS_DIM
     
     def _get_player(self):
         """Get the active player object (not player_spawn)."""
