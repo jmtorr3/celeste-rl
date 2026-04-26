@@ -26,11 +26,13 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 
 from src.environment import CelesteEnv
-from src.network import DuelingDQN
+from src.network import DQN
+from src.utils.paths import run_dir
 
 
-# Kinematic feature indices in the 31-dim state vector:
-# [x/128, y/128, spd_x, spd_y, grace, djump, *tile_grid_25]
+# Kinematic feature indices in the state vector:
+# [x/128, y/128, spd_x, spd_y, grace, djump, *tile_grid_81]
+# (still applies after the 5×5 → 9×9 expansion; the first 6 features are unchanged.)
 KINEMATIC_INDICES = [0, 1, 2, 3]  # x, y, spd_x, spd_y — add noise here only
 
 
@@ -96,13 +98,13 @@ def train(args):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
 
-    model = DuelingDQN(state_dim, n_actions).to(device)
+    model = DQN(state_dim, n_actions).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     criterion = nn.CrossEntropyLoss(weight=class_weights.to(device))
 
-    save_dir = Path(args.save_dir)
-    save_dir.mkdir(exist_ok=True)
+    rdir = run_dir(args.run_id)
+    print(f"Run dir: {rdir}/")
 
     best_val_acc = 0.0
     best_val_loss = float('inf')
@@ -150,7 +152,7 @@ def train(args):
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), save_dir / f'{args.run_id}_best.pt')
+            torch.save(model.state_dict(), rdir / 'best.pt')
 
         if epoch % args.log_interval == 0:
             print(
@@ -160,9 +162,9 @@ def train(args):
                 f"best val acc {best_val_acc:.3f}"
             )
 
-    torch.save(model.state_dict(), save_dir / f'{args.run_id}_final.pt')
+    torch.save(model.state_dict(), rdir / 'final.pt')
     print(f"\nBest val accuracy: {best_val_acc:.3f}")
-    print(f"Saved {args.run_id}_best.pt and {args.run_id}_final.pt to {save_dir}")
+    print(f"Saved best.pt and final.pt to {rdir}")
 
 
 def evaluate(args):
@@ -173,8 +175,8 @@ def evaluate(args):
     state_dim = CelesteEnv()._get_obs_dim()
     n_actions = len(CelesteEnv.SIMPLE_ACTIONS)
 
-    model = DuelingDQN(state_dim, n_actions).to(device)
-    model_path = args.model or f'models/{args.run_id}_best.pt'
+    model = DQN(state_dim, n_actions).to(device)
+    model_path = args.model or str(run_dir(args.run_id) / 'best.pt')
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     print(f"Loaded {model_path}")
@@ -219,7 +221,6 @@ def main():
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--noise-std', type=float, default=0.02)
     parser.add_argument('--log-interval', type=int, default=25)
-    parser.add_argument('--save-dir', type=str, default='models')
     parser.add_argument('--device', type=str, default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--eval-only', action='store_true')
     parser.add_argument('--eval-episodes', type=int, default=50)
