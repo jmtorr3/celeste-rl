@@ -40,6 +40,8 @@ def train(
     
     episode_rewards = []
     episode_heights = []
+    completions_log = []
+    total_completions = 0
     best_reward = float('-inf')
     best_height = float('inf')
     
@@ -68,25 +70,31 @@ def train(
         
         episode_rewards.append(episode_reward)
         episode_heights.append(info['max_height'])
-        
+        completed = info.get('completed', False)
+        completions_log.append(completed)
+        if completed:
+            total_completions += 1
+
         # Save best model (by height reached)
         if info['max_height'] < best_height:
             best_height = info['max_height']
             agent.save(save_path / "best.pt")
-        
+
         if episode_reward > best_reward:
             best_reward = episode_reward
-        
+
         # Logging
         if (episode + 1) % log_interval == 0:
             avg_reward = np.mean(episode_rewards[-log_interval:])
             avg_height = np.mean(episode_heights[-log_interval:])
             min_height = min(episode_heights[-log_interval:])
-            
+            recent_complete = sum(1 for c in completions_log[-log_interval:] if c)
+
             print(f"\nEpisode {episode + 1}/{num_episodes}")
             print(f"  Avg Reward:  {avg_reward:.2f}")
             print(f"  Avg Height:  {avg_height:.1f}")
             print(f"  Best Height: {min_height:.1f} (this batch), {best_height:.1f} (overall)")
+            print(f"  Complete:    {recent_complete}/{log_interval} recent, {total_completions} total")
             print(f"  Epsilon:     {agent.epsilon:.3f}")
             print(f"  Buffer:      {len(agent.buffer)}")
         
@@ -98,7 +106,7 @@ def train(
     # Save final model
     agent.save(save_path / "final.pt")
     
-    return episode_rewards, episode_heights
+    return episode_rewards, episode_heights, completions_log
 
 
 def evaluate(env: CelesteEnv, agent: DQNAgent, num_episodes: int = 20):
@@ -245,7 +253,7 @@ def main():
         evaluate(env, agent, num_episodes=20)
     else:
         # Train
-        rewards, heights = train(
+        rewards, heights, completions_log = train(
             env=env,
             agent=agent,
             run_id=args.run_id,
@@ -258,10 +266,15 @@ def main():
         from src.utils.paths import run_dir
         rdir = run_dir(args.run_id)
         with open(rdir / f"{args.run_id}_training.pkl", "wb") as f:
-            pickle.dump({'rewards': rewards, 'heights': heights}, f)
+            pickle.dump({
+                'rewards': rewards,
+                'heights': heights,
+                'completions_log': completions_log,
+                'completions': sum(completions_log),
+            }, f)
 
         from src.utils.plot import plot_run
-        plot_run(args.run_id, rewards, heights, save_dir=str(rdir))
+        plot_run(args.run_id, rewards, heights, completions=completions_log, save_dir=str(rdir))
         
         # Evaluate
         evaluate(env, agent, num_episodes=20)
