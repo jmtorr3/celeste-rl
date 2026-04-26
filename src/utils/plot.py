@@ -86,9 +86,9 @@ def plot_run(run_id, rewards, heights, completions=None, stage_boundaries=None,
     plt.tight_layout()
     if save_dir is None:
         from src.utils.paths import run_dir
-        save_path = run_dir(run_id) / 'curve.png'
+        save_path = run_dir(run_id) / f'{run_id}_curve.png'
     else:
-        save_path = Path(save_dir) / 'curve.png'
+        save_path = Path(save_dir) / f'{run_id}_curve.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path, dpi=150)
     plt.close(fig)

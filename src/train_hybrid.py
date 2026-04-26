@@ -213,7 +213,7 @@ def train(args):
 
     agent.save(str(rdir / 'final.pt'))
 
-    with open(rdir / 'training.pkl', 'wb') as f:
+    with open(rdir / f'{args.run_id}_training.pkl', 'wb') as f:
         pickle.dump({
             'rewards': rewards,
             'heights': heights,

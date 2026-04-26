@@ -260,7 +260,7 @@ def train(num_episodes=3000):
     
     agent.save(str(rdir / "final.pt"))
 
-    with open(rdir / "training.pkl", "wb") as f:
+    with open(rdir / "v2_training.pkl", "wb") as f:
         pickle.dump({
             'rewards': rewards,
             'heights': heights,
