@@ -29,7 +29,7 @@ class CelesteEnv:
         dash_time: Frames remaining in dash (int)
     """
     
-    OBS_DIM = 31  # 6 scalar features + 5x5 tile grid
+    OBS_DIM = 87  # 6 scalar features + 9x9 tile grid
     
     # Common useful actions (reduced action space)
     SIMPLE_ACTIONS = [
@@ -63,8 +63,6 @@ class CelesteEnv:
         Args:
             room: Level number (0-30). 0 is 100m, 20 is 2100m, 30 is summit.
             max_steps: Maximum steps before episode is truncated.
-            use_simple_actions: If True, use reduced action space (15 actions).
-            custom_actions: Optional list of action integers to use instead.
         """
         self.room = room
         self.max_steps = max_steps
@@ -100,7 +98,7 @@ class CelesteEnv:
     
     def _get_obs_dim(self) -> int:
         """Get observation dimension."""
-        return 31
+        return self.OBS_DIM
     
     def _get_player(self):
         """Get the active player object (not player_spawn)."""
@@ -169,18 +167,34 @@ class CelesteEnv:
             return np.zeros(self.OBS_DIM, dtype=np.float32) 
                
         # Convert player position to tile position
-        # Tiles are 8x8 pixels in PICO-8
+        # Tiles are 8x8 pixels, room is 16x16 tiles
         tile_x = int(player.x / 8)
         tile_y = int(player.y / 8)
         tile_grid = []
-        
-        # 5×5 window of tiles centered on the player
-        for dy in range(-2, 3):
-            for dx in range(-2, 3):
-                # Map is 16x16 pixels
-                tx = max(0, min(15, tile_x + dx))
-                ty = max(0, min(15, tile_y + dy))
-                tile_grid.append(float(self.p8.game.tile_at(tx, ty)))
+
+        # 9×9 window of tiles centered on the player.
+        # Encode semantically (raw tile IDs are unnormalized 0-255 noise to a NN):
+        #   -2.0 = out-of-bounds (sentinel — distinguishes wall from edge of room)
+        #   -1.0 = spike (death)
+        #    0.0 = empty / air
+        #    1.0 = solid (landable platform / wall)
+        #    0.5 = other (decoration, fruit, etc.)
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                tx = tile_x + dx
+                ty = tile_y + dy
+                if not (0 <= tx < 16 and 0 <= ty < 16):
+                    tile_grid.append(-2.0)
+                    continue
+                tile = self.p8.game.tile_at(tx, ty)
+                if tile == 0:
+                    tile_grid.append(0.0)
+                elif tile in (17, 27, 43, 59):
+                    tile_grid.append(-1.0)
+                elif self.p8.fget(tile, 0):
+                    tile_grid.append(1.0)
+                else:
+                    tile_grid.append(0.5)
                 
         # Normalize each value to be 0-1
         obs = np.array([
@@ -229,7 +243,23 @@ class CelesteEnv:
         # Bonuses grow larger closer to the exit to reinforce the final push.
         # milestones_hit is a set so each threshold only fires once per episode.
         
-        for threshold, bonus in ((40, 20.0), (20, 40.0), (10, 80.0), (0, 150.0), (-5, 300.0)):
+        for threshold, bonus in (
+            (50, 10.0),
+            (40, 20.0),
+            (30, 30.0),
+            (20, 45.0),
+            (17, 60.0),
+            (15, 80.0),
+            (13, 100.0),   # stuck-zone milestones — finer gradient through plateau
+            (11, 130.0),
+            (8, 170.0),
+            (5, 220.0),
+            (2, 280.0),
+            (0, 360.0),
+            (-2, 480.0),   # bridges the gap to exit
+            (-3, 640.0),
+            (-5, 900.0),
+        ):
             if player.y < threshold and threshold not in self.milestones_hit:
                 self.milestones_hit.add(threshold)
                 reward += bonus
@@ -275,11 +305,7 @@ class CelesteEnv:
         return False
 
     def _is_complete(self) -> bool:
-        player = self._get_player()
-        if player is None:
-            return self._is_room_transition()
-        # Fallback, since once level is complete player goes into "negative" pixels
-        return player.y < -8
+        return self._get_player() is None and self._is_room_transition()
     
     def _get_info(self) -> dict:
         """Get additional info about current state."""

@@ -100,7 +100,7 @@ def make_agent(args, device):
 
 
 def train_stage(agent, env, stage_label, max_episodes, advance_window,
-                advance_threshold, epsilon_decay, log_interval, run_id, save_dir, global_ep):
+                advance_threshold, epsilon_decay, log_interval, run_id, rdir, global_ep):
     """
     Train one curriculum stage.
     Returns (global_ep, completed_stage, heights, rewards, completions_log).
@@ -142,7 +142,7 @@ def train_stage(agent, env, stage_label, max_episodes, advance_window,
 
         if info['max_height'] < best_height:
             best_height = info['max_height']
-            agent.save(str(save_dir / f'{run_id}_best.pt'))
+            agent.save(str(rdir / 'best.pt'))
 
         # Decay epsilon once per episode
         agent.epsilon = max(agent.epsilon_end, agent.epsilon * epsilon_decay)
@@ -181,10 +181,9 @@ def train(args):
     if device == 'cuda':
         print(f"GPU:    {torch.cuda.get_device_name(0)}")
 
-    save_dir = Path(args.save_dir)
-    save_dir.mkdir(exist_ok=True)
-    docs_dir = Path('docs')
-    docs_dir.mkdir(exist_ok=True)
+    from src.utils.paths import run_dir
+    rdir = run_dir(args.run_id)
+    print(f"Run dir: {rdir}/")
 
     agent = make_agent(args, device)
 
@@ -226,7 +225,7 @@ def train(args):
             epsilon_decay=args.epsilon_decay,
             log_interval=args.log_interval,
             run_id=args.run_id,
-            save_dir=save_dir,
+            rdir=rdir,
             global_ep=global_ep,
         )
 
@@ -234,7 +233,7 @@ def train(args):
         all_heights.extend(stage_heights)
         all_completions.extend(stage_completions)
 
-        agent.save(str(save_dir / f'{args.run_id}_stage{stage_num}.pt'))
+        agent.save(str(rdir / f'stage{stage_num}.pt'))
         stage_results.append((stage_num, spawn_y, advanced))
 
         # Reset epsilon on every stage change so the agent re-explores from the new spawn
@@ -243,7 +242,7 @@ def train(args):
             agent.epsilon = max(args.epsilon_end, reset_eps)
             print(f"  Epsilon reset to {agent.epsilon:.3f} for next stage ({'advanced' if advanced else 'timeout'})")
 
-    agent.save(str(save_dir / f'{args.run_id}_final.pt'))
+    agent.save(str(rdir / 'final.pt'))
 
     print(f"\n{'='*60}")
     print(f"CURRICULUM TRAINING COMPLETE  |  {global_ep} total episodes")
@@ -252,7 +251,7 @@ def train(args):
         status = "advanced" if advanced else "timeout"
         print(f"  Stage {stage_num} (spawn_y={spawn_y}): {status}")
 
-    with open(docs_dir / f'training_{args.run_id}.pkl', 'wb') as f:
+    with open(rdir / 'training.pkl', 'wb') as f:
         pickle.dump({
             'stage_results': stage_results,
             'total_episodes': global_ep,
@@ -267,7 +266,7 @@ def train(args):
         args.run_id, all_rewards, all_heights,
         completions=all_completions,
         stage_boundaries=stage_boundaries,
-        save_dir=str(docs_dir),
+        save_dir=str(rdir),
     )
 
 
@@ -284,7 +283,8 @@ def evaluate(args):
         device=device,
         network_cls=DuelingDQN,
     )
-    model_path = args.model or str(Path(args.save_dir) / f'{args.run_id}_best.pt')
+    from src.utils.paths import run_dir
+    model_path = args.model or str(run_dir(args.run_id) / 'best.pt')
     agent.load(model_path)
     agent.epsilon = 0.0
     print(f"Loaded {model_path}")
@@ -336,7 +336,6 @@ def main():
     parser.add_argument('--advance-threshold', type=float, default=0.50,
                         help='Completion rate required to advance to next stage')
     parser.add_argument('--log-interval', type=int, default=50)
-    parser.add_argument('--save-dir', type=str, default='models')
     parser.add_argument('--device', type=str, default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--start-stage', type=int, default=1, choices=[1, 2, 3, 4, 5, 6],
                         help='Start from this stage (1=exit, 6=full level)')

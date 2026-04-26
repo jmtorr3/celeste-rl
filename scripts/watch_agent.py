@@ -27,7 +27,7 @@ def watch_agent(
 ):
     """Watch a trained agent play."""
 
-    env = CelesteEnv(room=room, max_steps=1000, use_simple_actions=True)
+    env = CelesteEnv(room=room, max_steps=1000)
 
     agent = DQNAgent(
         state_dim=env._get_obs_dim(),
@@ -43,7 +43,7 @@ def watch_agent(
         print(f"✗ Model not found: {model_path}")
         return
     
-    agent.epsilon = 0.0
+    agent.epsilon = 0.10  # match training noise — DQN completions are stochastic
     
     print(f"\nWatching agent play room {room}...")
     print("Press Ctrl+C to stop\n")
@@ -61,7 +61,7 @@ def watch_agent(
             while True:
                 print("\033[H\033[J", end="")  # Clear screen
                 
-                action = agent.select_action(state, training=False)
+                action = agent.select_action(state, training=True)
                 action_name = env.get_action_meaning(action)
                 
                 next_state, reward, terminated, truncated, info = env.step(action)
@@ -79,7 +79,7 @@ def watch_agent(
                 
                 if terminated or truncated:
                     print("\n" + "-" * 50)
-                    if info['player_alive'] and info.get('player_y', 999) < -8:
+                    if info.get('completed', False):
                         print("🎉 LEVEL COMPLETE!")
                     elif not info['player_alive']:
                         print("💀 DIED")

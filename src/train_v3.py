@@ -101,12 +101,10 @@ def train(args):
             start_episode = int(parts[1])
         print(f"Resumed from {args.resume} (episode ~{start_episode})")
 
+    from src.utils.paths import run_dir
     run_id = args.run_id
-    save_dir = Path(args.save_dir)
-    save_dir.mkdir(exist_ok=True)
-    docs_dir = Path('docs')
-    docs_dir.mkdir(exist_ok=True)
-    print(f"Run ID: {run_id}")
+    rdir = run_dir(run_id)
+    print(f"Run ID: {run_id}  ->  {rdir}/")
 
     rewards = []
     heights = []
@@ -141,14 +139,14 @@ def train(args):
 
         if info['max_height'] < best_height:
             best_height = info['max_height']
-            agent.save(str(save_dir / f'{run_id}_best.pt'))
+            agent.save(str(rdir / 'best.pt'))
 
         ep_num = episode + 1
 
         if ep_num % args.log_interval == 0:
             window = rewards[-args.log_interval:]
             h_window = heights[-args.log_interval:]
-            recent_complete = sum(1 for h in h_window if h < -8)
+            recent_complete = sum(1 for c in completions_log[-args.log_interval:] if c)
             print(
                 f"Ep {ep_num:>6} | "
                 f"reward {np.mean(window):>7.1f} | "
@@ -160,13 +158,13 @@ def train(args):
             )
 
         if ep_num % args.save_interval == 0:
-            ckpt_path = save_dir / f'{run_id}_checkpoint_ep{ep_num}.pt'
+            ckpt_path = rdir / f'checkpoint_ep{ep_num}.pt'
             agent.save(str(ckpt_path))
             print(f"  [checkpoint -> {ckpt_path}]")
 
-    agent.save(str(save_dir / f'{run_id}_final.pt'))
+    agent.save(str(rdir / 'final.pt'))
 
-    with open(docs_dir / f'training_{run_id}.pkl', 'wb') as f:
+    with open(rdir / 'training.pkl', 'wb') as f:
         pickle.dump({
             'rewards': rewards,
             'heights': heights,
@@ -175,7 +173,7 @@ def train(args):
         }, f)
 
     from src.utils.plot import plot_run
-    plot_run(run_id, rewards, heights, completions=completions_log, save_dir=str(docs_dir))
+    plot_run(run_id, rewards, heights, completions=completions_log, save_dir=str(rdir))
 
     print(f"\n{'='*60}")
     print(f"TRAINING COMPLETE")
@@ -197,7 +195,8 @@ def evaluate(args):
         device=device,
         network_cls=DuelingDQN,
     )
-    model_path = args.model or str(Path(args.save_dir) / f'{args.run_id}_best.pt')
+    from src.utils.paths import run_dir
+    model_path = args.model or str(run_dir(args.run_id) / 'best.pt')
     agent.load(model_path)
     agent.epsilon = 0.0
     print(f"Loaded {model_path}")
@@ -241,7 +240,6 @@ def main():
     parser.add_argument('--buffer-size', type=int, default=500000)
     parser.add_argument('--log-interval', type=int, default=50)
     parser.add_argument('--save-interval', type=int, default=500)
-    parser.add_argument('--save-dir', type=str, default='models')
     parser.add_argument('--device', type=str, default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint path')
     parser.add_argument('--eval-only', action='store_true')

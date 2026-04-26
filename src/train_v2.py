@@ -204,7 +204,8 @@ def train(num_episodes=3000):
         device=device
     )
     
-    Path("models").mkdir(exist_ok=True)
+    from src.utils.paths import run_dir
+    rdir = run_dir("v2")
     
     rewards = []
     heights = []
@@ -242,12 +243,12 @@ def train(num_episodes=3000):
         
         if info['max_height'] < best_height:
             best_height = info['max_height']
-            agent.save("models/model_v2_best.pt")
+            agent.save(str(rdir / "best.pt"))
         
         if (episode + 1) % 50 == 0:
             avg_reward = np.mean(rewards[-50:])
             avg_height = np.mean(heights[-50:])
-            recent_complete = sum(1 for h in heights[-50:] if h < -8)
+            recent_complete = sum(1 for c in completions_log[-50:] if c)
             
             print(f"\nEpisode {episode + 1}/{num_episodes}")
             print(f"  Avg Reward:     {avg_reward:.1f}")
@@ -257,11 +258,9 @@ def train(num_episodes=3000):
             print(f"  Epsilon:        {agent.epsilon:.3f}")
             print(f"  Unique pos:     {len(env.global_visit_counts)} discovered")
     
-    agent.save("models/model_v2_final.pt")
-    
-    # Save data
-    Path("docs").mkdir(exist_ok=True)
-    with open("docs/training_v2.pkl", "wb") as f:
+    agent.save(str(rdir / "final.pt"))
+
+    with open(rdir / "training.pkl", "wb") as f:
         pickle.dump({
             'rewards': rewards,
             'heights': heights,
@@ -270,7 +269,7 @@ def train(num_episodes=3000):
         }, f)
 
     from src.utils.plot import plot_run
-    plot_run('v2', rewards, heights, completions=completions_log)
+    plot_run('v2', rewards, heights, completions=completions_log, save_dir=str(rdir))
     
     print(f"\n{'='*60}")
     print(f"TRAINING COMPLETE")
@@ -290,7 +289,7 @@ def train(num_episodes=3000):
             state, _, done, trunc, info = env.step(action)
             if done or trunc:
                 break
-        if info['max_height'] < -8:
+        if info.get('completed', False):
             eval_completions += 1
             print(f"  Eval {ep+1}: ✓ COMPLETE")
         else:

@@ -5,9 +5,11 @@ import numpy as np
 
 
 def plot_run(run_id, rewards, heights, completions=None, stage_boundaries=None,
-             save_dir='docs', window=50):
+             save_dir=None, window=50):
     """
-    Save a labeled training curve to {save_dir}/{run_id}_curve.png.
+    Save a labeled training curve to runs/{run_id}/curve.png.
+
+    save_dir overrides the default location if provided (path to a directory).
 
     rewards, heights: per-episode lists
     completions: optional per-episode bool list (rolling completion rate panel)
@@ -82,8 +84,12 @@ def plot_run(run_id, rewards, heights, completions=None, stage_boundaries=None,
                             rotation=90, va='top', ha='right', fontsize=8, alpha=0.7)
 
     plt.tight_layout()
-    save_path = Path(save_dir) / f'{run_id}_curve.png'
-    save_path.parent.mkdir(exist_ok=True)
+    if save_dir is None:
+        from src.utils.paths import run_dir
+        save_path = run_dir(run_id) / 'curve.png'
+    else:
+        save_path = Path(save_dir) / 'curve.png'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path, dpi=150)
     plt.close(fig)
     print(f"Saved training curve to {save_path}")
