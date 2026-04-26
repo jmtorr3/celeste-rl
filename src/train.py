@@ -187,6 +187,15 @@ def main():
     parser.add_argument("--max-steps", type=int, default=500, help="Max steps per episode")
     parser.add_argument("--room", type=int, default=0, help="Room number (0-30)")
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
+    parser.add_argument("--epsilon-decay", type=float, default=0.999990,
+                        help="Epsilon decay factor per episode")
+    parser.add_argument("--epsilon-end", type=float, default=0.05,
+                        help="Final epsilon floor")
+    parser.add_argument("--buffer-size", type=int, default=500000,
+                        help="Replay buffer size")
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--device", type=str, default="auto",
+                        choices=["auto", "cuda", "cpu"])
     parser.add_argument("--eval-only", action="store_true", help="Only evaluate")
     parser.add_argument("--model", type=str, default=None, help="Model to load")
     parser.add_argument("--run-id", type=str, default="dqn", help="Prefix for saved files / plot title")
@@ -207,21 +216,24 @@ def main():
     print(f"  State dim:  {state_dim}")
     print(f"  Action dim: {action_dim}")
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = args.device
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"  Device:     {device}")
-    
-    # Create agent
+
+    # Create agent — plain DQN (NO Dueling). This script is the architectural
+    # ablation against train_v3 (which uses DuelingDQN with everything else equal).
     agent = DQNAgent(
         state_dim=state_dim,
         action_dim=action_dim,
         lr=args.lr,
         gamma=0.99,
         epsilon_start=1.0,
-        epsilon_end=0.05,
-        epsilon_decay=0.9995,
-        batch_size=128,
-        buffer_size=200000,
-        device=device
+        epsilon_end=args.epsilon_end,
+        epsilon_decay=args.epsilon_decay,
+        batch_size=args.batch_size,
+        buffer_size=args.buffer_size,
+        device=device,
     )
     
     # Load model if specified
