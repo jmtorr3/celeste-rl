@@ -59,9 +59,12 @@ if [[ ! -f "$MODEL" ]]; then
     exit 1
 fi
 
-# v3+ models use DuelingDQN — pass --dueling automatically
+# v3 / curriculum models use DuelingDQN — pass --dueling automatically.
+# (Hybrid and BC switched to plain DQN as of late 2026-04 to match dqn_r1.
+# Old hybrid/bc checkpoints still need --dueling, but new ones don't, so we
+# leave them off the auto-list — pass it explicitly if needed.)
 DUELING=""
-if [[ "$VERSION" -ge 3 ]] || [[ "$MODEL" == *"v3"* ]] || [[ "$MODEL" == *"hybrid"* ]] || [[ "$MODEL" == *"bc"* ]] || [[ "$MODEL" == *"curriculum"* ]]; then
+if [[ "$VERSION" -ge 3 ]] || [[ "$MODEL" == *"v3"* ]] || [[ "$MODEL" == *"curriculum"* ]]; then
     DUELING="--dueling"
 fi
 
