@@ -251,7 +251,7 @@ def train(args):
         status = "advanced" if advanced else "timeout"
         print(f"  Stage {stage_num} (spawn_y={spawn_y}): {status}")
 
-    with open(rdir / 'training.pkl', 'wb') as f:
+    with open(rdir / f'{args.run_id}_training.pkl', 'wb') as f:
         pickle.dump({
             'stage_results': stage_results,
             'total_episodes': global_ep,

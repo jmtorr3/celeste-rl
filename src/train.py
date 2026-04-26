@@ -245,7 +245,7 @@ def main():
 
         from src.utils.paths import run_dir
         rdir = run_dir(args.run_id)
-        with open(rdir / "training.pkl", "wb") as f:
+        with open(rdir / f"{args.run_id}_training.pkl", "wb") as f:
             pickle.dump({'rewards': rewards, 'heights': heights}, f)
 
         from src.utils.plot import plot_run
