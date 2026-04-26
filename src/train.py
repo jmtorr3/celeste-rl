@@ -197,7 +197,7 @@ def main():
     print("=" * 60)
     
     # Create environment
-    env = CelesteEnv(room=args.room, max_steps=args.max_steps, use_simple_actions=True)
+    env = CelesteEnv(room=args.room, max_steps=args.max_steps)
     
     state_dim = env._get_obs_dim()
     action_dim = env.n_actions
