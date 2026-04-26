@@ -229,7 +229,23 @@ class CelesteEnv:
         # Bonuses grow larger closer to the exit to reinforce the final push.
         # milestones_hit is a set so each threshold only fires once per episode.
         
-        for threshold, bonus in ((40, 20.0), (20, 40.0), (10, 80.0), (0, 150.0), (-5, 300.0)):
+        for threshold, bonus in (
+            (50, 10.0),
+            (40, 20.0),
+            (30, 30.0),
+            (20, 45.0),
+            (17, 60.0),
+            (15, 80.0),
+            (13, 100.0),   # stuck-zone milestones — finer gradient through plateau
+            (11, 130.0),
+            (8, 170.0),
+            (5, 220.0),
+            (2, 280.0),
+            (0, 360.0),
+            (-2, 480.0),   # bridges the gap to exit
+            (-3, 640.0),
+            (-5, 900.0),
+        ):
             if player.y < threshold and threshold not in self.milestones_hit:
                 self.milestones_hit.add(threshold)
                 reward += bonus
