@@ -2,6 +2,7 @@
 # Watch a trained Celeste RL agent play
 # Usage: ./watch.sh [options]
 #   -v VERSION    Version to watch: 1, 2, 3, ... (default: 1)
+#   -i RUN_ID     Run ID — loads runs/{RUN_ID}/best.pt
 #   -m MODEL      Override model path directly
 #   -r ROOM       Room number 0-30 (default: 0)
 #   -e EPISODES   Number of episodes to watch (default: 3)
@@ -12,6 +13,7 @@ cd "$(dirname "$0")"
 
 VERSION=1
 MODEL=""
+RUN_ID_OVERRIDE=""
 ROOM=0
 EPISODES=3
 DELAY=0.03
@@ -19,24 +21,36 @@ DELAY=0.03
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -v) VERSION="$2"; shift 2 ;;
+        -i) RUN_ID_OVERRIDE="$2"; shift 2 ;;
         -m) MODEL="$2"; shift 2 ;;
         -r) ROOM="$2"; shift 2 ;;
         -e) EPISODES="$2"; shift 2 ;;
         -d) DELAY="$2"; shift 2 ;;
         -h|--help)
-            sed -n '2,8p' "$0" | sed 's/^# //'
+            sed -n '2,9p' "$0" | sed 's/^# //'
             exit 0 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
-# Resolve model path from version if not given explicitly
+# -i RUN_ID overrides the version-based resolution
+if [[ -n "$RUN_ID_OVERRIDE" && -z "$MODEL" ]]; then
+    MODEL="runs/${RUN_ID_OVERRIDE}/best.pt"
+fi
+
+# Resolve model path from version if not given explicitly.
+# Prefer new layout runs/{run_id}/best.pt; fall back to legacy models/* paths.
 if [[ -z "$MODEL" ]]; then
     case "$VERSION" in
-        1) MODEL="models/dqn_best.pt" ;;
-        2) MODEL="models/model_v2_best.pt" ;;
-        *) MODEL="models/v${VERSION}_best.pt" ;;
+        1) RUN_ID="dqn"; LEGACY="models/dqn_best.pt" ;;
+        2) RUN_ID="v2"; LEGACY="models/model_v2_best.pt" ;;
+        *) RUN_ID="v${VERSION}"; LEGACY="models/v${VERSION}_best.pt" ;;
     esac
+    if [[ -f "runs/${RUN_ID}/best.pt" ]]; then
+        MODEL="runs/${RUN_ID}/best.pt"
+    else
+        MODEL="$LEGACY"
+    fi
 fi
 
 if [[ ! -f "$MODEL" ]]; then

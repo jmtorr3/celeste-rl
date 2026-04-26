@@ -28,26 +28,15 @@ import torch
 def train(
     env: CelesteEnv,
     agent: DQNAgent,
+    run_id: str = "dqn",
     num_episodes: int = 3000,
     max_steps: int = 500,
     log_interval: int = 50,
     save_interval: int = 200,
-    save_dir: str = "models"
 ):
-    """
-    Train the DQN agent.
-    
-    Args:
-        env: Celeste environment
-        agent: DQN agent
-        num_episodes: Number of training episodes
-        max_steps: Maximum steps per episode
-        log_interval: Episodes between logging
-        save_interval: Episodes between saving checkpoints
-        save_dir: Directory to save models
-    """
-    save_path = Path(save_dir)
-    save_path.mkdir(exist_ok=True)
+    """Train the DQN agent. Artifacts saved to runs/{run_id}/."""
+    from src.utils.paths import run_dir
+    save_path = run_dir(run_id)
     
     episode_rewards = []
     episode_heights = []
@@ -83,7 +72,7 @@ def train(
         # Save best model (by height reached)
         if info['max_height'] < best_height:
             best_height = info['max_height']
-            agent.save(save_path / "dqn_best.pt")
+            agent.save(save_path / "best.pt")
         
         if episode_reward > best_reward:
             best_reward = episode_reward
@@ -103,11 +92,11 @@ def train(
         
         # Regular checkpoint
         if (episode + 1) % save_interval == 0:
-            agent.save(save_path / "dqn_checkpoint.pt")
+            agent.save(save_path / f"checkpoint_ep{episode + 1}.pt")
             print(f"  [Checkpoint saved]")
     
     # Save final model
-    agent.save(save_path / "dqn_final.pt")
+    agent.save(save_path / "final.pt")
     
     return episode_rewards, episode_heights
 
@@ -247,20 +236,20 @@ def main():
         rewards, heights = train(
             env=env,
             agent=agent,
+            run_id=args.run_id,
             num_episodes=args.episodes,
             max_steps=args.max_steps,
             log_interval=50,
             save_interval=200,
-            save_dir="models"
         )
-        
-        # Save training data
-        with open(f"docs/training_{args.run_id}.pkl", "wb") as f:
+
+        from src.utils.paths import run_dir
+        rdir = run_dir(args.run_id)
+        with open(rdir / "training.pkl", "wb") as f:
             pickle.dump({'rewards': rewards, 'heights': heights}, f)
 
-        # Plot via shared util — produces docs/{run_id}_curve.png
         from src.utils.plot import plot_run
-        plot_run(args.run_id, rewards, heights)
+        plot_run(args.run_id, rewards, heights, save_dir=str(rdir))
         
         # Evaluate
         evaluate(env, agent, num_episodes=20)
