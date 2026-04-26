@@ -63,8 +63,6 @@ class CelesteEnv:
         Args:
             room: Level number (0-30). 0 is 100m, 20 is 2100m, 30 is summit.
             max_steps: Maximum steps before episode is truncated.
-            use_simple_actions: If True, use reduced action space (15 actions).
-            custom_actions: Optional list of action integers to use instead.
         """
         self.room = room
         self.max_steps = max_steps

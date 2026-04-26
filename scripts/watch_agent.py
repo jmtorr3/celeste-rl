@@ -27,7 +27,7 @@ def watch_agent(
 ):
     """Watch a trained agent play."""
 
-    env = CelesteEnv(room=room, max_steps=1000, use_simple_actions=True)
+    env = CelesteEnv(room=room, max_steps=1000)
 
     agent = DQNAgent(
         state_dim=env._get_obs_dim(),

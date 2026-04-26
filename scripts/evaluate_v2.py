@@ -20,7 +20,7 @@ from src.agent import DQNAgent
 def evaluate_agent(model_path: str, room: int = 0, num_episodes: int = 100, epsilon: float = 0.0):
     """Evaluate agent performance."""
     
-    env = CelesteEnv(room=room, max_steps=1000, use_simple_actions=True)
+    env = CelesteEnv(room=room, max_steps=1000)
     
     agent = DQNAgent(
         state_dim=env._get_obs_dim(),
