@@ -28,8 +28,9 @@ celeste-rl/
 │       └── plot.py               # shared training-curve plot
 │
 ├── scripts/
-│   ├── watch_agent.py            # visualize a trained agent
-│   └── evaluate.py               # measure success rate over N episodes
+│   ├── watch_agent.py            # visualize a trained agent in the terminal
+│   ├── evaluate.py               # measure success rate over N episodes
+│   └── record_gif.py             # record a successful run as an animated GIF
 │
 ├── runs/{run_id}/                # all artifacts of one training run
 │   ├── best.pt
@@ -137,6 +138,24 @@ python src/train_v3.py --run-id v3_r10b --device cuda --resume runs/v3_r10/check
 ```
 
 ⚠️ `watch_agent.py` runs with ε=0.10 by default. Many of our checkpoints only complete the level *stochastically* — pure greedy play (ε=0) often gets stuck. If you want deterministic play, edit `scripts/watch_agent.py:46`.
+
+## Record a demo GIF
+
+For posting to a presentation, blog, or LinkedIn — capture a successful run as an animated GIF (terminal-style ASCII rendering).
+
+```bash
+# Saves to runs/v3_r9/v3_r9_demo.gif
+python scripts/record_gif.py --run-id v3_r9
+
+# Use a specific checkpoint (recommended — best.pt is often misleading)
+python scripts/record_gif.py --model runs/v3_r9/checkpoint_ep1950.pt \
+  --output v3_r9_demo.gif
+
+# Tweak playback speed and how many attempts before giving up
+python scripts/record_gif.py --run-id v3_r9 --fps 15 --max-attempts 50
+```
+
+The script retries until it captures a *successful* episode, so failed attempts don't make it into the GIF. Default is 30 attempts at ε=0.05.
 
 ## Evaluate a checkpoint
 
