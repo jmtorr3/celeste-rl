@@ -247,7 +247,7 @@ def train(num_episodes=3000):
         if (episode + 1) % 50 == 0:
             avg_reward = np.mean(rewards[-50:])
             avg_height = np.mean(heights[-50:])
-            recent_complete = sum(1 for h in heights[-50:] if h < -8)
+            recent_complete = sum(1 for c in completions_log[-50:] if c)
             
             print(f"\nEpisode {episode + 1}/{num_episodes}")
             print(f"  Avg Reward:     {avg_reward:.1f}")
@@ -290,7 +290,7 @@ def train(num_episodes=3000):
             state, _, done, trunc, info = env.step(action)
             if done or trunc:
                 break
-        if info['max_height'] < -8:
+        if info.get('completed', False):
             eval_completions += 1
             print(f"  Eval {ep+1}: ✓ COMPLETE")
         else:

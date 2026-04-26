@@ -196,7 +196,7 @@ def train(args):
         if ep_num % args.log_interval == 0:
             window = rewards[-args.log_interval:]
             h_window = heights[-args.log_interval:]
-            recent_complete = sum(1 for h in h_window if h < -8)
+            recent_complete = sum(1 for c in completions_log[-args.log_interval:] if c)
             print(
                 f"Ep {ep_num:>6} | "
                 f"reward {np.mean(window):>7.1f} | "

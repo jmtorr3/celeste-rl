@@ -275,11 +275,7 @@ class CelesteEnv:
         return False
 
     def _is_complete(self) -> bool:
-        player = self._get_player()
-        if player is None:
-            return self._is_room_transition()
-        # Fallback, since once level is complete player goes into "negative" pixels
-        return player.y < -8
+        return self._get_player() is None and self._is_room_transition()
     
     def _get_info(self) -> dict:
         """Get additional info about current state."""

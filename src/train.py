@@ -137,7 +137,7 @@ def evaluate(env: CelesteEnv, agent: DQNAgent, num_episodes: int = 20):
         rewards.append(episode_reward)
         heights.append(info['max_height'])
         
-        success = info['player_y'] < -8 if info['player_alive'] else False
+        success = info.get('completed', False)
         if success:
             successes += 1
         
