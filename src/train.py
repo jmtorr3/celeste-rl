@@ -200,6 +200,7 @@ def main():
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
     parser.add_argument("--eval-only", action="store_true", help="Only evaluate")
     parser.add_argument("--model", type=str, default=None, help="Model to load")
+    parser.add_argument("--run-id", type=str, default="dqn", help="Prefix for saved files / plot title")
     args = parser.parse_args()
     
     print("=" * 60)
@@ -254,11 +255,12 @@ def main():
         )
         
         # Save training data
-        with open("docs/training_data.pkl", "wb") as f:
+        with open(f"docs/training_{args.run_id}.pkl", "wb") as f:
             pickle.dump({'rewards': rewards, 'heights': heights}, f)
-        
-        # Plot
-        plot_results(rewards, heights)
+
+        # Plot via shared util — produces docs/{run_id}_curve.png
+        from src.utils.plot import plot_run
+        plot_run(args.run_id, rewards, heights)
         
         # Evaluate
         evaluate(env, agent, num_episodes=20)

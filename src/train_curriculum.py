@@ -102,7 +102,8 @@ def make_agent(args, device):
 def train_stage(agent, env, stage_label, max_episodes, advance_window,
                 advance_threshold, epsilon_decay, log_interval, run_id, save_dir, global_ep):
     """
-    Train one curriculum stage. Returns (global_ep, completed_stage).
+    Train one curriculum stage.
+    Returns (global_ep, completed_stage, heights, rewards, completions_log).
     completed_stage=True if advancement criterion was met.
     """
     heights = []
@@ -166,10 +167,10 @@ def train_stage(agent, env, stage_label, max_episodes, advance_window,
             recent_rate = sum(completions_log[-advance_window:]) / advance_window
             if recent_rate >= advance_threshold:
                 print(f"\n  >> STAGE COMPLETE — {recent_rate:.0%} completion over last {advance_window} eps <<")
-                return global_ep, True
+                return global_ep, True, heights, rewards, completions_log
 
     print(f"\n  >> Stage timeout ({max_episodes} eps) — completions: {stage_completions}/{max_episodes} <<")
-    return global_ep, False
+    return global_ep, False, heights, rewards, completions_log
 
 
 def train(args):
@@ -195,11 +196,18 @@ def train(args):
 
     global_ep = 0
     stage_results = []
+    all_rewards = []
+    all_heights = []
+    all_completions = []
+    stage_boundaries = []  # list of (cumulative_episode_index, label) at each stage start
 
     stages = STAGES[args.start_stage - 1:]  # allow starting mid-curriculum
 
     for i, (spawn_y, spawn_x, max_steps, label) in enumerate(stages):
         stage_num = args.start_stage + i
+
+        # Mark the cumulative episode index where this stage begins
+        stage_boundaries.append((len(all_rewards), f'S{stage_num} y={spawn_y}'))
 
         env = CurriculumEnv(
             spawn_y=spawn_y,
@@ -208,7 +216,7 @@ def train(args):
             max_steps=max_steps,
         )
 
-        global_ep, advanced = train_stage(
+        global_ep, advanced, stage_heights, stage_rewards, stage_completions = train_stage(
             agent=agent,
             env=env,
             stage_label=label,
@@ -221,6 +229,10 @@ def train(args):
             save_dir=save_dir,
             global_ep=global_ep,
         )
+
+        all_rewards.extend(stage_rewards)
+        all_heights.extend(stage_heights)
+        all_completions.extend(stage_completions)
 
         agent.save(str(save_dir / f'{args.run_id}_stage{stage_num}.pt'))
         stage_results.append((stage_num, spawn_y, advanced))
@@ -241,7 +253,22 @@ def train(args):
         print(f"  Stage {stage_num} (spawn_y={spawn_y}): {status}")
 
     with open(docs_dir / f'training_{args.run_id}.pkl', 'wb') as f:
-        pickle.dump({'stage_results': stage_results, 'total_episodes': global_ep}, f)
+        pickle.dump({
+            'stage_results': stage_results,
+            'total_episodes': global_ep,
+            'rewards': all_rewards,
+            'heights': all_heights,
+            'completions_log': all_completions,
+            'stage_boundaries': stage_boundaries,
+        }, f)
+
+    from src.utils.plot import plot_run
+    plot_run(
+        args.run_id, all_rewards, all_heights,
+        completions=all_completions,
+        stage_boundaries=stage_boundaries,
+        save_dir=str(docs_dir),
+    )
 
 
 def evaluate(args):

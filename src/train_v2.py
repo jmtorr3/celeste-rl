@@ -208,6 +208,7 @@ def train(num_episodes=3000):
     
     rewards = []
     heights = []
+    completions_log = []
     completions = 0
     best_height = float('inf')
     
@@ -234,8 +235,9 @@ def train(num_episodes=3000):
         
         rewards.append(episode_reward)
         heights.append(info['max_height'])
-        
-        if info['max_height'] < -8:
+        completed = info.get('completed', info['max_height'] < -8)
+        completions_log.append(completed)
+        if completed:
             completions += 1
         
         if info['max_height'] < best_height:
@@ -260,7 +262,15 @@ def train(num_episodes=3000):
     # Save data
     Path("docs").mkdir(exist_ok=True)
     with open("docs/training_v2.pkl", "wb") as f:
-        pickle.dump({'rewards': rewards, 'heights': heights, 'completions': completions}, f)
+        pickle.dump({
+            'rewards': rewards,
+            'heights': heights,
+            'completions_log': completions_log,
+            'completions': completions,
+        }, f)
+
+    from src.utils.plot import plot_run
+    plot_run('v2', rewards, heights, completions=completions_log)
     
     print(f"\n{'='*60}")
     print(f"TRAINING COMPLETE")
