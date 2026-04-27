@@ -75,8 +75,20 @@ def render_frame(env, font, episode, step, total_completions, status=""):
 
 
 def record_run(model_path, output, epsilon=0.05, max_attempts=30, fps=20,
-               room=0, max_steps=500, dueling=True):
+               room=0, max_steps=500, dueling=None):
     env = CelesteEnv(room=room, max_steps=max_steps)
+
+    # Auto-detect architecture from checkpoint if not forced.
+    if dueling is None:
+        try:
+            from scripts.evaluate import detect_architecture
+            arch = detect_architecture(model_path)
+            dueling = (arch == 'dueling')
+            print(f"Auto-detected architecture: {arch}")
+        except Exception as e:
+            print(f"Architecture auto-detect failed ({e}); defaulting to plain DQN.")
+            dueling = False
+
     agent = DQNAgent(
         state_dim=env._get_obs_dim(),
         action_dim=env.n_actions,
@@ -171,8 +183,10 @@ if __name__ == "__main__":
                         help="Max episodes to try before giving up (default: 30)")
     parser.add_argument("--room", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=500)
-    parser.add_argument("--no-dueling", action="store_true",
-                        help="Use plain DQN architecture (default is DuelingDQN)")
+    parser.add_argument("--dueling", action="store_true", default=None,
+                        help="Force DuelingDQN. Default: auto-detect from checkpoint.")
+    parser.add_argument("--no-dueling", dest="dueling", action="store_false",
+                        help="Force plain DQN.")
     args = parser.parse_args()
 
     model_path = resolve_model_path(args)
@@ -185,5 +199,5 @@ if __name__ == "__main__":
         fps=args.fps,
         room=args.room,
         max_steps=args.max_steps,
-        dueling=not args.no_dueling,
+        dueling=args.dueling,
     )
