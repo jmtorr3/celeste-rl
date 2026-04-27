@@ -169,27 +169,68 @@ def composite_grid(panel_imgs, cols):
     return canvas
 
 
+def _frame_position(global_step, episodes):
+    """
+    Given a global step index and a list of (frames, outcome) episodes for one method,
+    return (ascii_to_show, ep_idx, total_eps, outcome_or_None, completes_so_far,
+    episodes_finished_so_far).
+
+    Episodes are concatenated end-to-end. After the last episode finishes, the panel
+    freezes on the final frame.
+    """
+    total_eps = len(episodes)
+    completes_so_far = 0
+    cursor = 0
+    for ep_idx, (frames, outcome) in enumerate(episodes, start=1):
+        if global_step < cursor + len(frames):
+            local = global_step - cursor
+            is_final_step_of_ep = (local == len(frames) - 1)
+            return (
+                frames[local],
+                ep_idx,
+                total_eps,
+                outcome if is_final_step_of_ep else None,
+                completes_so_far,
+                ep_idx - 1,
+            )
+        cursor += len(frames)
+        if outcome[0] == 'COMPLETE':
+            completes_so_far += 1
+
+    # Past the last episode: freeze on its final frame
+    last_frames, last_outcome = episodes[-1]
+    return (
+        last_frames[-1],
+        total_eps,
+        total_eps,
+        last_outcome,
+        completes_so_far,
+        total_eps,
+    )
+
+
 def build_comparison_gif(runs, output, epsilon=0.05, fps=15, room=0, max_steps=500,
-                         include_random=True, cols=None):
-    """Run one episode per method, sync them, write a comparison GIF."""
+                         include_random=True, cols=None, n_episodes=10):
+    """Run N episodes per method, sync them, write a single comparison GIF."""
     font_grid = load_font(13)
     font_label = load_font(13)
 
-    # Run each method once
-    method_data = []  # list of (label, frames, outcome)
+    method_data = []  # list of (label, episodes) where episodes = [(frames, outcome), ...]
 
     if include_random:
-        print(f"  random... ", end="", flush=True)
-        frames, outcome = run_random_episode(room, max_steps)
-        method_data.append(("random", frames, outcome))
-        print(f"{len(frames)} frames, {outcome[0]}")
+        print(f"  random ({n_episodes} eps)... ", end="", flush=True)
+        episodes = run_random_episodes(n_episodes, room, max_steps)
+        completes = sum(1 for _, o in episodes if o[0] == 'COMPLETE')
+        method_data.append(("random", episodes))
+        print(f"{completes}/{n_episodes} complete")
 
     for run_id, path in runs.items():
-        print(f"  {run_id}... ", end="", flush=True)
+        print(f"  {run_id} ({n_episodes} eps)... ", end="", flush=True)
         try:
-            frames, outcome = run_episode(path, epsilon, room, max_steps)
-            method_data.append((run_id, frames, outcome))
-            print(f"{len(frames)} frames, {outcome[0]}")
+            episodes = run_episodes(path, epsilon, n_episodes, room, max_steps)
+            completes = sum(1 for _, o in episodes if o[0] == 'COMPLETE')
+            method_data.append((run_id, episodes))
+            print(f"{completes}/{n_episodes} complete")
         except Exception as e:
             print(f"ERROR: {e}")
 
@@ -197,50 +238,48 @@ def build_comparison_gif(runs, output, epsilon=0.05, fps=15, room=0, max_steps=5
         print("No methods ran successfully — nothing to record.")
         return
 
-    # Sort: best result first (COMPLETE > timeout > died)
-    def sort_key(m):
-        text, _ = m[2]
-        if text == 'COMPLETE': return 0
-        if text.startswith('timeout'): return 1
-        return 2
-    method_data.sort(key=sort_key)
+    # Sort: best methods (most completes) first
+    method_data.sort(key=lambda m: -sum(1 for _, o in m[1] if o[0] == 'COMPLETE'))
 
-    # Synchronize length: pad shorter episodes with their final frame
-    total_steps = max(len(f) for _, f, _ in method_data)
-    print(f"\nSyncing all panels to {total_steps} frames...")
+    # Total length per method = sum of all its episode frame counts.
+    # The GIF runs until the longest method finishes.
+    method_total_frames = [sum(len(f) for f, _ in eps) for _, eps in method_data]
+    timeline_length = max(method_total_frames)
+    print(f"\nTimeline: {timeline_length} frames "
+          f"(longest method ran {n_episodes} episodes summing to {timeline_length} frames)")
 
-    # Decide grid layout
+    # Grid layout
     n = len(method_data)
     if cols is None:
         cols = 3 if n >= 4 else (2 if n >= 2 else 1)
 
     # Build composite frames
     composite_frames = []
-    for step in range(total_steps):
+    for step in range(timeline_length):
         panels = []
-        for label, frames, outcome in method_data:
-            if step < len(frames):
-                ascii_grid = frames[step]
-                panel_outcome = None
-            else:
-                # Episode over — freeze on final frame, show outcome
-                ascii_grid = frames[-1]
-                panel_outcome = outcome
+        for label, episodes in method_data:
+            ascii_grid, ep_idx, total_eps, outcome, completes, finished = _frame_position(
+                step, episodes,
+            )
             panels.append(render_panel(
-                label, ascii_grid, min(step + 1, len(frames)), len(frames),
-                panel_outcome, font_grid, font_label,
+                label, ascii_grid, ep_idx, total_eps,
+                outcome, (completes, finished),
+                font_grid, font_label,
             ))
         composite_frames.append(composite_grid(panels, cols))
 
-    # Hold the final frame for ~2 seconds so viewers can read the outcomes
+    # Hold the final frame for ~3 seconds so viewers can read the final tallies
     final_panels = []
-    for label, frames, outcome in method_data:
+    for label, episodes in method_data:
+        last_frames, last_outcome = episodes[-1]
+        completes = sum(1 for _, o in episodes if o[0] == 'COMPLETE')
         final_panels.append(render_panel(
-            label, frames[-1], len(frames), len(frames),
-            outcome, font_grid, font_label,
+            label, last_frames[-1], len(episodes), len(episodes),
+            last_outcome, (completes, len(episodes)),
+            font_grid, font_label,
         ))
     final = composite_grid(final_panels, cols)
-    for _ in range(int(fps * 2)):
+    for _ in range(int(fps * 3)):
         composite_frames.append(final)
 
     # Write GIF
@@ -262,6 +301,8 @@ def build_comparison_gif(runs, output, epsilon=0.05, fps=15, room=0, max_steps=5
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runs-dir', type=str, default='runs')
+    parser.add_argument('--episodes', type=int, default=10,
+                        help='Episodes per method (default: 10)')
     parser.add_argument('--epsilon', type=float, default=0.05)
     parser.add_argument('--fps', type=int, default=15)
     parser.add_argument('--room', type=int, default=0)
@@ -286,7 +327,7 @@ def main():
         print(f"No runs found under {args.runs_dir}/")
         return
 
-    print(f"Recording one episode each at ε={args.epsilon}:")
+    print(f"Recording {args.episodes} episodes per method at ε={args.epsilon}:")
     build_comparison_gif(
         runs, args.output,
         epsilon=args.epsilon,
@@ -295,6 +336,7 @@ def main():
         max_steps=args.max_steps,
         include_random=args.include_random,
         cols=args.cols,
+        n_episodes=args.episodes,
     )
 
 
