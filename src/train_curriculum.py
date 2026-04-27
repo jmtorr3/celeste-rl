@@ -29,10 +29,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 
-from src.train_v3 import CelesteEnvV3
 from src.agent import DQNAgent
 from src.environment import CelesteEnv
-from src.network import DuelingDQN
+from src.network import DQN
 
 
 # (spawn_y, spawn_x, max_steps, label)
@@ -48,9 +47,9 @@ STAGES = [
 ]
 
 
-class CurriculumEnv(CelesteEnvV3):
+class CurriculumEnv(CelesteEnv):
     """
-    CelesteEnvV3 with a configurable spawn position.
+    CelesteEnv with a configurable spawn position.
 
     After the normal reset, teleport the player to (spawn_x, spawn_y).
     spawn_x should come from TAS data so the player lands on the actual
@@ -58,6 +57,9 @@ class CurriculumEnv(CelesteEnvV3):
     If spawn_x is None, only y is overridden (x stays at game default).
     Milestones above the spawn point are pre-marked to avoid free rewards.
     """
+
+    # Must mirror the milestone thresholds in environment.py:_compute_reward.
+    _MILESTONE_THRESHOLDS = (50, 40, 30, 20, 17, 15, 13, 11, 8, 5, 2, 0, -2, -3, -5)
 
     def __init__(self, spawn_y: int = 96, spawn_x: int = None, **kwargs):
         super().__init__(**kwargs)
@@ -75,8 +77,9 @@ class CurriculumEnv(CelesteEnvV3):
             self.prev_x = player.x
             self.best_height_this_episode = player.y
             self.max_height_reached = player.y
-            # pre-mark milestones the agent already starts above
-            for threshold in (40, 20, 10, 0, -5):
+            # Pre-mark milestones the agent already starts above (so the curriculum
+            # agent doesn't get free rewards for milestones it spawned past).
+            for threshold in self._MILESTONE_THRESHOLDS:
                 if self.spawn_y < threshold:
                     self.milestones_hit.add(threshold)
         return self._get_obs(), self._get_info()
@@ -95,7 +98,7 @@ def make_agent(args, device):
         batch_size=args.batch_size,
         buffer_size=args.buffer_size,
         device=device,
-        network_cls=DuelingDQN,
+        network_cls=DQN,
     )
 
 
@@ -281,7 +284,7 @@ def evaluate(args):
         state_dim=env._get_obs_dim(),
         action_dim=env.n_actions,
         device=device,
-        network_cls=DuelingDQN,
+        network_cls=DQN,
     )
     from src.utils.paths import run_dir
     model_path = args.model or str(run_dir(args.run_id) / 'best.pt')
