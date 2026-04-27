@@ -132,26 +132,33 @@ def evaluate_random(room=0, num_episodes=100, max_steps=500):
 
 
 def discover_runs(runs_dir='runs', overrides=None):
-    """Find every runs/*/best.pt. Apply overrides if given."""
+    """Find models in runs/, supporting two layouts:
+    - runs/{run_id}/best.pt          (per-run folder)
+    - runs/{run_id}.pt               (flat, matches release naming)
+    Overrides take precedence.
+    """
     overrides = overrides or {}
     runs = {}
     runs_path = Path(runs_dir)
     if not runs_path.exists():
         return runs
+
+    # Folder layout: runs/{run_id}/best.pt
     for sub in sorted(runs_path.iterdir()):
-        if not sub.is_dir():
-            continue
-        run_id = sub.name
-        if run_id in overrides:
-            runs[run_id] = overrides[run_id]
-        else:
+        if sub.is_dir():
             best = sub / 'best.pt'
             if best.exists():
-                runs[run_id] = str(best)
-    # Add any overrides for runs not in the runs/ directory
+                runs[sub.name] = str(best)
+
+    # Flat layout: runs/{run_id}.pt
+    for f in sorted(runs_path.glob('*.pt')):
+        run_id = f.stem
+        runs.setdefault(run_id, str(f))
+
+    # Apply overrides
     for run_id, path in overrides.items():
-        if run_id not in runs:
-            runs[run_id] = path
+        runs[run_id] = path
+
     return runs
 
 
