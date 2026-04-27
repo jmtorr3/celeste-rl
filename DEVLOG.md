@@ -342,6 +342,39 @@ The death/timeout split per method is signal, not noise:
 
 The hybrid_r2 result is striking: 100% deaths, 0% timeouts. Worse than random (which had 85 deaths). The implementation bug genuinely anti-trained the network on optimal moves.
 
+## Phase 10: hybrid revisited with the reward fix (April 27)
+
+After locking in the comparison results, we returned to the hybrid implementation to test whether fixing the zero-reward bug would change the picture. The fix in `build_expert_transitions` was small: instead of storing `(obs, action, 0.0, next_obs, done)`, we now reset the env and replay the TAS actions through it, capturing the real milestone rewards along the optimal trajectory. We also dropped the saved-obs from the pickle entirely (it was 31-dim from an earlier export) and used the env's current observations only.
+
+`hybrid_r3` ran with the corrected reward stream, same hyperparameters as `dqn_r1`. The result was different from `hybrid_r2` but still didn't beat plain DQN.
+
+```
+Ep  450: best 6  avg_h 53.6  reward 68     ← peak progress
+Ep 1000: best 6  avg_h 57.0  reward 45     ← stagnating
+Ep 1450: best 6  avg_h 72.8  reward 16     ← actively regressing
+Ep 1850: best 6  avg_h 68.2  reward 23     ← still degrading
+```
+
+Two things stood out compared to `hybrid_r2` and `dqn_r1`:
+
+**The BC seeding worked, briefly.** `hybrid_r3` reached y=6 by episode 450 — substantially faster than `dqn_r1`, which took ~1000 episodes to reach y=8. The expert buffer with real rewards was clearly pointing the network at productive moves early. So the original premise of hybrid was vindicated — TAS warm-start does accelerate early learning.
+
+**But the agent then stalled and regressed.** Best height stuck at 6 for 1400 more episodes while average height *climbed* from 54 to 72 and per-episode reward fell from 68 to 23. Killed the run at episode 1850; the trajectory wasn't recovering.
+
+We attribute the failure to off-policy bootstrapping divergence rather than anti-training:
+
+1. **Expert overfit pressure.** With 66 transitions sampled at 20% of every 128-batch, ~25 transitions per gradient update are repeats from the same 66 frames. That's massive overfit pressure on a small set of (state, action) pairs.
+
+2. **Reward magnitude mismatch.** Expert transitions individually carry milestone rewards of +100 to +900. Online transitions during failed episodes carry 0 to +20 per frame. The gradient signal from the expert side is 10–50× larger per sample, pulling Q-values along the expert trajectory toward values the online policy can't realize — because it never reaches those states without the seed working harder than it actually does.
+
+3. **The expert teaches what's already learned.** The TAS passes through y=6 on its way to the exit. By episode 450 the policy already knows how to reach y=6. The expert buffer reinforces what the network already has and provides no new information past that point, while the online policy can't reach y<-4 to populate the buffer with terminal-reward transitions naturally.
+
+So `hybrid_r3` failed for a *different* reason than `hybrid_r2`. The original (buggy) version anti-trained the network with zero-reward expert data, producing 100% deaths. The corrected version has the opposite problem — the expert rewards are too dominant, the early seeding works but the agent can't escape the seeded region.
+
+This is consistent with the broader literature: simple "preload buffer + train normally" hybrid setups are known to be brittle. Methods that work robustly (e.g., DQfD, Hester et al. 2018) require either supervised pre-training before online RL, or specific mechanisms to anneal the expert influence over time. We didn't have time to implement either before the deadline.
+
+For the comparison, the takeaway updates: hybrid has *two distinct failure modes* under our two implementations, neither of which beats plain DQN. The zero-reward bug produced 100% deaths; the corrected version produces stalled-and-regressing learning. Both 0% at deterministic-equivalent eval. The "complexity hurts in this setting" thesis holds across both attempts; a robust hybrid implementation remains future work.
+
 ## What we found
 
 Five method variants were tested. Only one beat the random baseline meaningfully. That one — plain DQN with semantic tile encoding — beat the next-best variant (Dueling DQN + curiosity) by 20 percentage points.
