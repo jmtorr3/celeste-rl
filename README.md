@@ -6,7 +6,7 @@ We trained reinforcement learning agents to play room 0 of [Celeste Classic](htt
 
 The headline finding was that **state representation mattered more than algorithm choice**. Replacing raw PICO-8 tile IDs (0–255) with a 5-class semantic encoding (air / solid / spike / out-of-bounds / other) raised plain DQN's completion rate from about 8% to roughly 60% with no other change. None of the algorithmic enhancements we tried — Dueling, curiosity, BC, hybrid, or curriculum — beat plain DQN with the perception fix.
 
-This README covers how the repo is laid out, how to set it up, and how to reproduce or extend our results.
+This README covers how the repo is laid out, how to set it up, and how to reproduce or extend our results. For the full debugging story — every run, every dead end, every bug we found along the way — see [`DEVLOG.md`](DEVLOG.md).
 
 ## Repo layout
 
