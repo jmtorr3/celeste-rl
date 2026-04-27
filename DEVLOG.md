@@ -362,6 +362,22 @@ A few caveats worth being honest about in the paper:
 
 5. **Single-room evaluation.** All comparisons are on Celeste room 0. Generalization to other rooms or full-game completion is future work — and there's prior art ([effdotsh/Celeste-Bot](https://github.com/effdotsh/Celeste-Bot), a genetic algorithm) that does solve the full game, suggesting population-based or on-policy methods with curiosity (PPO + RND) are probably the right algorithm class for the harder rooms.
 
+## Future work
+
+A few directions we'd take this if we had more time. We're listing them as actionable next steps rather than aspirational ones — each one is something we could run on the existing infrastructure.
+
+**Fix the hybrid implementation and re-run.** The hybrid bug — expert transitions saved with `reward=0` instead of replayed through the env — is a real implementation issue, not a property of imitation+RL methods. A correct version would replay each TAS frame through the env to capture the actual reward stream. Whether a corrected hybrid matches plain DQN, beats it, or still underperforms is the most interesting open question we have. If hybrid wins after the fix, our broader "complexity hurts" thesis weakens; if it still loses, the thesis gets stronger. Either result is worth knowing.
+
+**Multiple seeds per method.** Every result here is single-seed. The qualitative ordering is robust (we confirmed it across the per-run vs batched evaluations), but the gap between dqn_r1 and v3_r9 lacks a confidence band. Three seeds per method would let us put error bars on every bar in the comparison chart and test whether the 20-point gap is significant at p < 0.05. Realistic time budget: ~30 GPU-hours.
+
+**Generalization to other rooms.** All comparisons are on room 0. Whether plain DQN with semantic encoding continues to dominate on rooms with different layouts and different action requirements (e.g., dash chains in rooms 5+, wind levels in rooms 12+, falling-block sequences) is genuinely unknown. The infrastructure supports it — `CelesteEnv(room=N)` works for any N from 0 to 30. The bottleneck is compute. Sequential transfer (`--resume` from one room to the next) is the cheapest path; per-room independent training would be more rigorous but ~30× more expensive.
+
+**Single-variable architectural ablation.** dqn_r1 and v3_r9 differ on two axes simultaneously (plain vs Dueling DQN, no curiosity vs curiosity bonus). To attribute the 20-point gap cleanly, we'd run plain DQN with the curiosity bonus (a single new training run) and decompose the result. If `plain DQN + curiosity` lands close to v3_r9, the curiosity bonus did the damage; if it lands closer to dqn_r1, Dueling did. Cheapest unfinished experiment in the project.
+
+**Larger expert dataset for BC.** Sixty-six TAS transitions is genuinely too few. Adding 5–10 hand-recorded human playthroughs (each ~70–100 frames of slightly imperfect play) would let us test whether BC's failure is fundamental or data-limited. Distribution shift theory says it's fundamental for precision tasks; an empirical confirmation either way is interesting.
+
+These are workshop-paper-tier next steps. The most impactful single one is fixing hybrid; the most rigorous is multiple seeds.
+
 ## Things we'd do differently
 
 Looking back, three things stand out.
