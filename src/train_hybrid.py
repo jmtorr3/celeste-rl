@@ -83,25 +83,27 @@ class HybridBuffer:
 def build_expert_transitions(tas_path: str, env: CelesteEnv):
     """
     Convert (obs, action_idx) TAS pairs into full (s, a, r, s', done) transitions
-    by stepping through the environment.
+    by replaying the actions through the live env. This captures the actual
+    milestone / shaping rewards the env emits along the optimal trajectory —
+    rather than zeroing them out as an earlier version of this code did, which
+    anti-trained the network on optimal moves.
+
+    The saved `obs` in the pickle is ignored: it was recorded under an older
+    state encoding and can be stale across env changes. We use the env's
+    current observations only.
     """
     with open(tas_path, 'rb') as f:
         tas_data = pickle.load(f)
 
-    # tas_data is list of (obs, action_idx) — we need to re-step to get rewards
-    # Group by room boundary: re-export isn't feasible here, so we construct
-    # synthetic transitions: reward=0, done=False for all expert steps.
-    # The agent learns WHAT to do from expert states; reward shaping during
-    # online training teaches it WHY.
     transitions = []
-    for i, (obs, action_idx) in enumerate(tas_data):
-        if i + 1 < len(tas_data):
-            next_obs = tas_data[i + 1][0]
-            done = False
-        else:
-            next_obs = obs  # terminal — next obs doesn't matter
-            done = True
-        transitions.append((obs, action_idx, 0.0, next_obs, done))
+    obs, _ = env.reset()
+    for i, (_saved_obs, action_idx) in enumerate(tas_data):
+        next_obs, reward, terminated, truncated, _ = env.step(action_idx)
+        done = terminated or truncated
+        transitions.append((obs, action_idx, reward, next_obs, done))
+        obs = next_obs
+        if done:
+            break  # TAS ended; further actions would replay against a fresh episode
 
     return transitions
 
