@@ -46,7 +46,7 @@ def load_font(size=14):
     return ImageFont.load_default()
 
 
-def render_frame(env, font, episode, step, total_completions, status=""):
+def render_frame(env, font, episode, step, total_completions, label, status=""):
     """Render the env's ASCII grid as a PIL image with a status footer."""
     text = env.render()
     lines = text.split("\n")
@@ -63,10 +63,10 @@ def render_frame(env, font, episode, step, total_completions, status=""):
     for i, line in enumerate(lines):
         draw.text((10, 10 + i * char_h), line, fill=FG, font=font)
 
-    # Footer
+    # Footer — show the run/model label so the gif identifies itself
     footer_y = 10 + len(lines) * char_h + 8
     draw.text((10, footer_y),
-              f"v3_r9  ep{episode}  step{step:>3}  completions: {total_completions}",
+              f"{label}  ep{episode}  step{step:>3}  completions: {total_completions}",
               fill=ACCENT, font=font)
     if status:
         draw.text((10, footer_y + char_h + 4), status, fill=ACCENT, font=font)
@@ -74,9 +74,27 @@ def render_frame(env, font, episode, step, total_completions, status=""):
     return img
 
 
+def derive_label(model_path):
+    """Pick a human-readable label from a checkpoint path.
+
+    runs/dqn_r1.pt              -> "dqn_r1"
+    runs/dqn_r1/best.pt         -> "dqn_r1"
+    runs/dqn_r1/checkpoint_ep5000.pt -> "dqn_r1"
+    """
+    p = os.path.normpath(model_path)
+    parts = p.split(os.sep)
+    if len(parts) >= 2 and parts[-2] != 'runs' and parts[-2] != '.':
+        # In a runs/{run_id}/ subfolder
+        return parts[-2]
+    # Flat layout — strip extension
+    return os.path.splitext(parts[-1])[0]
+
+
 def record_run(model_path, output, epsilon=0.05, max_attempts=30, fps=20,
-               room=0, max_steps=500, dueling=None):
+               room=0, max_steps=500, dueling=None, label=None):
     env = CelesteEnv(room=room, max_steps=max_steps)
+    if label is None:
+        label = derive_label(model_path)
 
     # Auto-detect architecture from checkpoint if not forced.
     if dueling is None:
@@ -111,7 +129,7 @@ def record_run(model_path, output, epsilon=0.05, max_attempts=30, fps=20,
             state, _, terminated, truncated, info = env.step(action)
             step += 1
 
-            frames.append(render_frame(env, font, attempt, step, attempt - 1))
+            frames.append(render_frame(env, font, attempt, step, attempt - 1, label))
 
             if terminated or truncated:
                 break
@@ -125,7 +143,7 @@ def record_run(model_path, output, epsilon=0.05, max_attempts=30, fps=20,
 
         if completed:
             # Hold the final frame for ~1s so the loop has a clear ending
-            final = render_frame(env, font, attempt, step, attempt, status="LEVEL COMPLETE")
+            final = render_frame(env, font, attempt, step, attempt, label, status="LEVEL COMPLETE")
             for _ in range(int(fps)):
                 frames.append(final)
 
@@ -187,6 +205,8 @@ if __name__ == "__main__":
                         help="Force DuelingDQN. Default: auto-detect from checkpoint.")
     parser.add_argument("--no-dueling", dest="dueling", action="store_false",
                         help="Force plain DQN.")
+    parser.add_argument("--label", type=str, default=None,
+                        help="Footer label (default: derived from model path).")
     args = parser.parse_args()
 
     model_path = resolve_model_path(args)
@@ -200,4 +220,5 @@ if __name__ == "__main__":
         room=args.room,
         max_steps=args.max_steps,
         dueling=args.dueling,
+        label=args.label,
     )
