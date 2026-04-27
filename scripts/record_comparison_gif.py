@@ -63,8 +63,16 @@ def load_font(size):
     return ImageFont.load_default()
 
 
-def run_episode(model_path, epsilon, room=0, max_steps=500):
-    """Run one episode, capturing each frame's ASCII grid + final outcome."""
+def _classify_outcome(info):
+    if info.get('completed', False):
+        return ('COMPLETE', COLOR_COMPLETE)
+    if not info.get('player_alive', True):
+        return (f"died (h={info.get('max_height', 0):.0f})", COLOR_DIED)
+    return (f"timeout (h={info.get('max_height', 0):.0f})", COLOR_TIMEOUT)
+
+
+def run_episodes(model_path, epsilon, n_episodes, room=0, max_steps=500):
+    """Run N episodes back-to-back, return list of (frames, outcome) per episode."""
     env = CelesteEnv(room=room, max_steps=max_steps)
     arch = detect_architecture(model_path)
     agent = DQNAgent(
@@ -76,54 +84,60 @@ def run_episode(model_path, epsilon, room=0, max_steps=500):
     agent.load(model_path)
     agent.epsilon = epsilon
 
-    frames = []
-    state, _ = env.reset()
-    info = {}
-    while True:
-        action = agent.select_action(state, training=(epsilon > 0))
-        state, _, terminated, truncated, info = env.step(action)
-        frames.append(env.render())
-        if terminated or truncated:
-            break
-
-    if info.get('completed', False):
-        outcome = ('COMPLETE', COLOR_COMPLETE)
-    elif not info.get('player_alive', True):
-        outcome = (f"died (h={info.get('max_height', 0):.0f})", COLOR_DIED)
-    else:
-        outcome = (f"timeout (h={info.get('max_height', 0):.0f})", COLOR_TIMEOUT)
-
-    return frames, outcome
+    episodes = []
+    for _ in range(n_episodes):
+        frames = []
+        state, _ = env.reset()
+        info = {}
+        while True:
+            action = agent.select_action(state, training=(epsilon > 0))
+            state, _, terminated, truncated, info = env.step(action)
+            frames.append(env.render())
+            if terminated or truncated:
+                break
+        episodes.append((frames, _classify_outcome(info)))
+    return episodes
 
 
-def run_random_episode(room=0, max_steps=500):
-    """Random-action baseline episode for comparison."""
+def run_random_episodes(n_episodes, room=0, max_steps=500):
+    """Random-action baseline — N episodes."""
     env = CelesteEnv(room=room, max_steps=max_steps)
-    frames = []
-    state, _ = env.reset()
-    info = {}
-    while True:
-        state, _, terminated, truncated, info = env.step(env.action_space.sample())
-        frames.append(env.render())
-        if terminated or truncated:
-            break
-
-    if info.get('completed', False):
-        outcome = ('COMPLETE', COLOR_COMPLETE)
-    elif not info.get('player_alive', True):
-        outcome = (f"died (h={info.get('max_height', 0):.0f})", COLOR_DIED)
-    else:
-        outcome = (f"timeout (h={info.get('max_height', 0):.0f})", COLOR_TIMEOUT)
-    return frames, outcome
+    episodes = []
+    for _ in range(n_episodes):
+        frames = []
+        state, _ = env.reset()
+        info = {}
+        while True:
+            state, _, terminated, truncated, info = env.step(env.action_space.sample())
+            frames.append(env.render())
+            if terminated or truncated:
+                break
+        episodes.append((frames, _classify_outcome(info)))
+    return episodes
 
 
-def render_panel(label, ascii_text, step, total_steps, outcome, font_grid, font_label):
-    """One panel: header (label), body (ascii), footer (step / outcome)."""
+def render_panel(label, ascii_text, ep_idx, total_eps, outcome, tally, font_grid, font_label):
+    """
+    One panel:
+      header  = method label + running tally (e.g. "dqn_r1     3/7 complete")
+      body    = live ASCII grid
+      footer  = current episode marker + outcome (color-coded if episode ended)
+
+    tally  = (completes_so_far, episodes_finished_so_far)
+    outcome = (text, color) if current episode finished, else None (still running)
+    """
     img = Image.new("RGB", (PANEL_W, PANEL_H), PANEL_BG)
     draw = ImageDraw.Draw(img)
 
-    # Header — method name
+    # Header — method name + running tally
+    completes, finished = tally
+    tally_str = f"{completes}/{finished} complete" if finished else ""
     draw.text((10, 4), label, fill=LABEL_FG, font=font_label)
+    if tally_str:
+        # Right-align the tally
+        bbox = draw.textbbox((0, 0), tally_str, font=font_label)
+        tw = bbox[2] - bbox[0]
+        draw.text((PANEL_W - tw - 10, 4), tally_str, fill=COLOR_RUNNING, font=font_label)
 
     # Body — ASCII grid
     lines = ascii_text.split("\n")
@@ -132,13 +146,13 @@ def render_panel(label, ascii_text, step, total_steps, outcome, font_grid, font_
         draw.text((10, y), line, fill=PANEL_FG, font=font_grid)
         y += CHAR_H
 
-    # Footer — step counter and outcome (color-coded once episode ends)
+    # Footer — episode marker + outcome
     footer_y = PANEL_H - FOOTER_H + 4
     if outcome is not None:
         text, color = outcome
-        draw.text((10, footer_y), f"step {step}/{total_steps}  {text}", fill=color, font=font_label)
+        draw.text((10, footer_y), f"ep {ep_idx}/{total_eps}  {text}", fill=color, font=font_label)
     else:
-        draw.text((10, footer_y), f"step {step}/{total_steps}  …", fill=COLOR_RUNNING, font=font_label)
+        draw.text((10, footer_y), f"ep {ep_idx}/{total_eps}  running…", fill=COLOR_RUNNING, font=font_label)
 
     return img
 
