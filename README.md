@@ -215,6 +215,16 @@ Old checkpoints from before the perception fix (state went from 31-dim to 87-dim
 
 The `pyleste/` directory is a vendored copy of the [Pyleste emulator](https://github.com/CelesteClassic/Pyleste). We modified some of its internal state-access paths to expose what `CelesteEnv` needed; we did not modify game logic.
 
+## Credits
+
+*Celeste Classic* was created by [Maddy Thorson](https://maddythorson.com/) and [Noel Berry](https://noelberry.ca/) for PICO-8. All game assets, level design, and original code belong to them — this project uses the game purely as a research environment for an academic ML course and does not redistribute the original cart or assets.
+
+We also relied on work by the [CelesteClassic community](https://github.com/CelesteClassic):
+
+- [Pyleste](https://github.com/CelesteClassic/Pyleste) — the Python PICO-8 emulator that makes the agent loop possible. Vendored under `pyleste/`; we modified internal state-access paths but did not touch game logic.
+- [celesteclassic.github.io](https://github.com/CelesteClassic/celesteclassic.github.io) — web-playable port, used as reference for level layout and behavior.
+- [TAS database](https://celesteclassic.github.io/tasdatabase/classic/) — source of the expert demonstrations used for Behavioral Cloning and Hybrid training.
+
 ## References
 
 - [Pyleste](https://github.com/CelesteClassic/Pyleste) — Python emulator we built on
